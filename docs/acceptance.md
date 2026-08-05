@@ -18,23 +18,23 @@ Do not paste secrets, PINs, tokens, machine usernames, or absolute user-profile 
 
 ## Verification Commands
 
-The repository is not bootstrapped, so no executable commands exist yet. P0-03 must replace this paragraph with exact commands and copy the highest-value forms into `AGENTS.md`.
+The Windows solution is bootstrapped. The following commands are run from the repository root; mobile commands remain pending until P1-05 bootstraps Flutter.
 
 The completed command table must contain:
 
 | Scope | Required command |
 |---|---|
-| Windows restore | Exact locked restore command |
-| Windows build | Exact Release build command |
-| One C# test | Exact filter syntax for one test method |
-| One C# project | Exact command for one test project |
-| All driver-free C# tests | Exact full CI-safe command |
-| Driver diagnostics | Exact command, clearly marked hardware-only |
-| Flutter dependencies | Exact locked dependency command |
-| One Dart test | Exact file/test-name command |
-| Flutter analyze | Exact analyzer command |
-| All mobile tests | Exact full command |
-| APK build | Exact release APK command |
+| Windows restore | `dotnet restore windows/Pulgapp.sln --force-evaluate` |
+| Windows build | `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` |
+| One C# test | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"` |
+| One C# project | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build` |
+| All driver-free C# tests | `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` |
+| Driver diagnostics | `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build` (hardware-only) |
+| Flutter dependencies | Pending P1-05 mobile bootstrap |
+| One Dart test | Pending P1-05 mobile bootstrap |
+| Flutter analyze | Pending P1-05 mobile bootstrap |
+| All mobile tests | Pending P1-05 mobile bootstrap |
+| APK build | Pending P1-05 mobile bootstrap |
 
 ## Global Safety Acceptance
 

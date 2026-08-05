@@ -30,8 +30,8 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P0 - Toolchain, protocol fixture, and driver compatibility spike`
-- Next task: `P0-03`
-- Last completed task: `P0-02`
+- Next task: `P0-04`
+- Last completed task: `P0-03`
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human driver and game checks remain pending.
 - Blocking gate: Pummel Party must recognize four X360 plus four DS4 virtual targets.
 
@@ -108,17 +108,25 @@ Evidence (2026-08-05):
 
 ### P0-03 Bootstrap the Windows solution
 
-- [ ] Create `windows/Pulgapp.sln` using the .NET 10 SDK.
-- [ ] Create WPF project `Pulgapp.Server.App` targeting `net10.0-windows` and x64.
-- [ ] Create class libraries `Pulgapp.Server.Core`, `Pulgapp.Server.Protocol`, and `Pulgapp.Server.Infrastructure`.
-- [ ] Create xUnit projects for Core, Protocol, Infrastructure, and Integration tests.
-- [ ] Create console tools `Pulgapp.DriverDiagnostics` and `Pulgapp.LoadGenerator`.
-- [ ] Add all projects to the solution and project references according to `docs/architecture.md`.
-- [ ] Enable nullable reference types, implicit usings, deterministic builds, warnings as errors for repository code, and NuGet lockfiles.
-- [ ] Pin `Nefarius.ViGEm.Client` 1.21.256 only in Infrastructure and DriverDiagnostics.
-- [ ] Add exact restore, build, focused-test, and full-test commands to `AGENTS.md`.
+- [x] Create `windows/Pulgapp.sln` using the .NET 10 SDK.
+- [x] Create WPF project `Pulgapp.Server.App` targeting `net10.0-windows` and x64.
+- [x] Create class libraries `Pulgapp.Server.Core`, `Pulgapp.Server.Protocol`, and `Pulgapp.Server.Infrastructure`.
+- [x] Create xUnit projects for Core, Protocol, Infrastructure, and Integration tests.
+- [x] Create console tools `Pulgapp.DriverDiagnostics` and `Pulgapp.LoadGenerator`.
+- [x] Add all projects to the solution and project references according to `docs/architecture.md`.
+- [x] Enable nullable reference types, implicit usings, deterministic builds, warnings as errors for repository code, and NuGet lockfiles.
+- [x] Pin `Nefarius.ViGEm.Client` 1.21.256 only in Infrastructure and DriverDiagnostics.
+- [x] Add exact restore, build, focused-test, and full-test commands to `AGENTS.md`.
 
-Evidence: pending.
+Evidence (2026-08-05):
+- Automated: `dotnet restore windows/Pulgapp.sln --force-evaluate` -> PASS, all 10 projects restored and 10 `packages.lock.json` files generated.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors, duration 9.97 seconds.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"` -> PASS, 1/1 test, duration 9 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build` -> PASS, 1/1 test, duration 10 ms.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 tests, 0 errors.
+- Automated: `grep Nefarius.ViGEm.Client windows/**/*.csproj` -> PASS, package version `1.21.256` appears only in Infrastructure and DriverDiagnostics.
+- Artifacts: `windows/Pulgapp.sln`, `windows/Directory.Build.props`, 10 project files, 10 `packages.lock.json` files, `AGENTS.md`, `docs/acceptance.md`.
+- Exceptions: Projects contain template-only source and tests; no application, protocol, or driver behavior was implemented. Driver diagnostics and game checks remain pending human verification.
 
 ### P0-04 Implement driver diagnostics
 

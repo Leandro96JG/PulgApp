@@ -2,9 +2,23 @@
 
 ## Current State
 
-- This repository is not bootstrapped yet: there are no manifests, source files, lockfiles, CI workflows, or executable developer commands.
-- Do not guess build or verification commands. Once projects exist, derive commands from manifests/scripts and update this file with the exact focused and full verification commands.
+- The Windows solution is bootstrapped under `windows/` with ten projects and one NuGet lockfile per project. Application logic and mobile code are not implemented yet.
+- Do not guess build or verification commands. Derive commands from manifests/scripts and keep the exact focused and full verification commands below current.
 - Treat this file as the bootstrap contract only. Once created, `protocol/protocol-v1.md` and its binary fixtures are the canonical protocol source.
+
+## Windows Verification Commands
+
+Run these commands from the repository root:
+
+```powershell
+dotnet restore windows/Pulgapp.sln --force-evaluate
+dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64
+dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"
+dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build
+dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64
+```
+
+`dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build` is hardware-only and must not run in normal driver-free CI.
 
 ## Product Constraints
 
