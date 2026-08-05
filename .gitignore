@@ -1,0 +1,29 @@
+# Generated dependencies and build output
+.opencode/node_modules/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# .NET build output
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Android and local machine files
+android/.gradle/
+android/local.properties
+*.iml
+.idea/
+
+# Test and diagnostic artifacts
+*.log
+TestResults/
+artifacts/
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example

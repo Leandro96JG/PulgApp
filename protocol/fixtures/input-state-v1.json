@@ -1,0 +1,24 @@
+{
+  "description": "Pulgapp UDP input snapshot v1 golden fixture",
+  "length": 60,
+  "sha256": "78d85292958a276290ef82a7cdc657a8eaf1d7f23ab27b3132732859210ff7df",
+  "fields": {
+    "magic": "PULG",
+    "version": 1,
+    "packetType": 1,
+    "flags": 0,
+    "sessionIdHex": "0123456789abcdef",
+    "udpTokenHex": "00112233445566778899aabbccddeeff",
+    "sequence": 42,
+    "clientTimeUs": 1234567,
+    "buttons": ["A", "RB", "START", "DPAD_UP"],
+    "buttonsValue": 2209,
+    "leftX": 16384,
+    "leftY": -8192,
+    "rightX": 0,
+    "rightY": 32767,
+    "leftTrigger": 32768,
+    "rightTrigger": 65535
+  },
+  "expectedHex": "50554c4701010000efcdab896745230100112233445566778899aabbccddeeff2a00000087d6120000000000a1080000004000e00000ff7f0080ffff"
+}
