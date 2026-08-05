@@ -30,8 +30,8 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P0 - Toolchain, protocol fixture, and driver compatibility spike`
-- Next task: `P0-02`
-- Last completed task: `P0-01`
+- Next task: `P0-03`
+- Last completed task: `P0-02`
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human driver and game checks remain pending.
 - Blocking gate: Pummel Party must recognize four X360 plus four DS4 virtual targets.
 
@@ -95,12 +95,16 @@ Evidence (2026-08-05):
 
 ### P0-02 Materialize the golden binary fixture
 
-- [ ] Convert `protocol/fixtures/input-state-v1.hex` into `protocol/fixtures/input-state-v1.bin` without changing bytes.
-- [ ] Verify the binary length is exactly 60 bytes.
-- [ ] Verify its SHA-256 equals the value recorded in `input-state-v1.json` after that value has been computed once.
-- [ ] Do not implement either codec before this fixture exists.
+- [x] Convert `protocol/fixtures/input-state-v1.hex` into `protocol/fixtures/input-state-v1.bin` without changing bytes.
+- [x] Verify the binary length is exactly 60 bytes.
+- [x] Verify its SHA-256 equals the value recorded in `input-state-v1.json` after that value has been computed once.
+- [x] Do not implement either codec before this fixture exists.
 
-Evidence: pending.
+Evidence (2026-08-05):
+- Automated: `$hex = [IO.File]::ReadAllText('protocol/fixtures/input-state-v1.hex'); $bytes = [Convert]::FromHexString(($hex -replace '\s','')); [IO.File]::WriteAllBytes('protocol/fixtures/input-state-v1.bin',$bytes)` -> PASS, generated 60 bytes and SHA-256 `78d85292958a276290ef82a7cdc657a8eaf1d7f23ab27b3132732859210ff7df`.
+- Automated: fixture comparison script validating JSON parse, declared length, `expectedHex`, canonical `.hex`, and metadata SHA-256 -> PASS, all five checks true.
+- Artifacts: `protocol/fixtures/input-state-v1.bin`, `protocol/fixtures/input-state-v1.hex`, `protocol/fixtures/input-state-v1.json`.
+- Exceptions: No codec implementation was added. Human driver and game checks remain pending.
 
 ### P0-03 Bootstrap the Windows solution
 
