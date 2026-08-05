@@ -32,7 +32,7 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 - Current phase: `P0 - Toolchain, protocol fixture, and driver compatibility spike`
 - Next task: `P0-02`
 - Last completed task: `P0-01`
-- Blockers: Flutter doctor still reports that the Visual Studio Windows desktop workload is absent; this is not required for the Android client or the .NET WPF host. Human driver and game checks remain pending.
+- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human driver and game checks remain pending.
 - Blocking gate: Pummel Party must recognize four X360 plus four DS4 virtual targets.
 
 ## Repository Shape
@@ -83,14 +83,15 @@ Goal: prove the riskiest driver/game assumption before building the networked pr
 
 Evidence (2026-08-05):
 - Automated: `dotnet --info` -> PASS, .NET SDK 10.0.302 and .NET host 10.0.10 detected on x64.
-- Automated: `flutter doctor -v` -> PASS for the Android toolchain, Flutter stable 3.44.8 and Dart 3.12.2 detected; WARNING for the missing Visual Studio Windows desktop workload.
+- Automated: `flutter --version` -> PASS, Flutter stable 3.44.8 and Dart 3.12.2 detected.
+- Automated: `flutter doctor -v` -> PASS for the Android toolchain; WARNING for Flutter's non-blocking `0.0.0-unknown` version metadata and the missing Visual Studio Windows desktop workload.
 - Automated: `flutter doctor --android-licenses` -> PASS, all Android SDK licenses accepted.
 - Automated: `Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' | Select-Object ProductName,DisplayVersion,CurrentBuild,UBR` -> PASS, Windows 10 Pro 22H2 build 19045.
 - Automated: `Get-CimInstance Win32_OperatingSystem | Format-List Caption,Version,BuildNumber,OSArchitecture; Get-CimInstance Win32_ComputerSystem | Format-List Manufacturer,Model,SystemType; [Environment]::Is64BitOperatingSystem` -> PASS, x64-based PC and 64-bit operating system.
 - Automated: `winget list --id ViGEm.ViGEmBus -e` -> PASS, ViGEmBus package 1.22.0 installed.
 - Automated: `Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName -match 'ViGEm|Virtual Gamepad' -or $_.Manufacturer -match 'Nefarius|ViGEm' }` -> PASS, Nefarius virtual bus detected, driver version 1.21.442.0.
 - Artifacts: `docs/development.md`.
-- Exceptions: Visual Studio Windows desktop workload is not installed; it is outside the Android-first client and .NET WPF prerequisite set. Human driver and game checks remain pending.
+- Exceptions: Flutter doctor metadata and Visual Studio Windows desktop workload warnings are outside the Android-first client and .NET WPF prerequisite set. Human driver and game checks remain pending.
 
 ### P0-02 Materialize the golden binary fixture
 
