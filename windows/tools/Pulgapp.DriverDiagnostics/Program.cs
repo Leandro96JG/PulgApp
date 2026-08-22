@@ -52,12 +52,13 @@ internal enum DiagnosticMode
     EightTargets
 }
 
-internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan Duration, bool ShowHelp)
+internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan? Duration, bool ShowHelp)
 {
     public static DiagnosticOptions Parse(string[] args)
     {
         var mode = DiagnosticMode.EightTargets;
         var duration = TimeSpan.FromSeconds(30);
+        var waitForCancel = false;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -90,12 +91,15 @@ internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan Duration,
 
                     duration = TimeSpan.FromSeconds(seconds);
                     break;
+                case "--wait-for-cancel":
+                    waitForCancel = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown argument '{args[index]}'. Use --help for usage.");
             }
         }
 
-        return new DiagnosticOptions(mode, duration, false);
+        return new DiagnosticOptions(mode, waitForCancel ? null : duration, false);
     }
 
     public static void PrintHelp()
@@ -106,6 +110,7 @@ internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan Duration,
         Console.WriteLine("  --mode one-ds4        Create and exercise one DS4 target.");
         Console.WriteLine("  --mode eight           Create four X360 and four DS4 targets.");
         Console.WriteLine("  --duration-seconds N   Hold deterministic states for N seconds (default: 30).");
+        Console.WriteLine("  --wait-for-cancel      Hold targets until Ctrl+C; overrides --duration-seconds.");
         Console.WriteLine("  --help                 Show this help.");
     }
 }
@@ -159,7 +164,10 @@ internal sealed class DiagnosticRun : IDisposable
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
         _client = new ViGEmClient();
-        Console.WriteLine($"ViGEm client connected; mode={_options.Mode}, duration={_options.Duration.TotalSeconds:0.###}s.");
+        var duration = _options.Duration is { } configuredDuration
+            ? $"{configuredDuration.TotalSeconds:0.###}s"
+            : "until Ctrl+C";
+        Console.WriteLine($"ViGEm client connected; mode={_options.Mode}, duration={duration}.");
 
         CreateTargets();
         foreach (var target in _targets)
@@ -169,11 +177,13 @@ internal sealed class DiagnosticRun : IDisposable
 
         Console.WriteLine($"Created {_targets.Count} target(s). Initial state is neutral.");
         ApplyDeterministicStates();
-        Console.WriteLine("Deterministic test states submitted. Press Ctrl+C to stop early.");
+        Console.WriteLine(_options.Duration is null
+            ? "Deterministic test states submitted. Press Ctrl+C to neutralize and disconnect targets."
+            : "Deterministic test states submitted. Press Ctrl+C to stop early.");
 
         try
         {
-            await Task.Delay(_options.Duration, cancellationToken);
+            await Task.Delay(_options.Duration ?? Timeout.InfiniteTimeSpan, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

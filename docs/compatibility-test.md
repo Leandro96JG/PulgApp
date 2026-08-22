@@ -32,7 +32,7 @@ Tester:
 
 ## Test A: One X360
 
-1. Start diagnostics in one-X360 mode.
+1. Start diagnostics in one-X360 mode with `--wait-for-cancel`.
 2. Open `joy.cpl` and confirm one new controller.
 3. Apply neutral and verify no button/axis remains active.
 4. Exercise every button, both sticks, D-pad, and triggers.
@@ -42,7 +42,7 @@ Pass requires correct state and cleanup, not enumeration alone.
 
 ## Test B: One DS4
 
-1. Start diagnostics in one-DS4 mode.
+1. Start diagnostics in one-DS4 mode with `--wait-for-cancel`.
 2. Confirm one new HID game controller in Windows.
 3. Verify centered axes, all directions, diagonals, buttons, and analog triggers.
 4. Specifically verify canonical up appears as up after DS4 Y inversion.
@@ -50,7 +50,7 @@ Pass requires correct state and cleanup, not enumeration alone.
 
 ## Test C: Four Plus Four
 
-1. Start diagnostics in eight-target mode.
+1. Start diagnostics in eight-target mode with `--wait-for-cancel`.
 2. Confirm exactly four X360 and four DS4 targets were created.
 3. Assign a unique held state to each target, such as a different button or axis direction.
 4. Verify each Windows device shows only its assigned state.
@@ -81,6 +81,14 @@ For each variant:
 9. Exit the game, stop diagnostics, and confirm all targets disappear.
 
 Pass requires eight independently controllable in-game players. Seeing eight Windows devices is not sufficient.
+
+Use a terminal opened manually before launching the diagnostic. Keep it open while switching to `joy.cpl` or the game. The recommended command is:
+
+```powershell
+dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode eight --wait-for-cancel
+```
+
+The targets remain present until `Ctrl+C` is pressed in that terminal. The process writes `duration=until Ctrl+C` at startup; if it prints `All targets neutralized.` before then, record the preceding output as a diagnostic failure.
 
 ## Test E: It Takes Two
 

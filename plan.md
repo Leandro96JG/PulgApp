@@ -143,6 +143,7 @@ Evidence (2026-08-05):
 - Automated driver smoke: `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode one-ds4 --duration-seconds 1` -> PASS, one DS4 target connected, received neutral and deterministic complete reports, then neutralized and disposed.
 - Automated driver smoke: `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode eight --duration-seconds 0` -> PASS, four X360 and four DS4 targets connected simultaneously, received deterministic states, then all eight were neutralized and disposed.
 - Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 driver-free tests.
+- Automated (2026-08-22): diagnostic `--help` -> PASS, `--wait-for-cancel` is available for manual Windows/game checks and keeps targets active until Ctrl+C.
 - Artifacts: `windows/tools/Pulgapp.DriverDiagnostics/Program.cs`, `AGENTS.md`, `docs/acceptance.md`.
 - Exceptions: P0-05 Windows device observation and Pummel Party/It Takes Two compatibility checks remain pending human hardware/game verification.
 
