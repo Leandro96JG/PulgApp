@@ -49,6 +49,7 @@ internal enum DiagnosticMode
 {
     OneX360,
     OneDs4,
+    TwoX360,
     EightTargets
 }
 
@@ -79,15 +80,16 @@ internal sealed record DiagnosticOptions(
                 case "--mode":
                     if (++index >= args.Length)
                     {
-                        throw new ArgumentException("--mode requires one-x360, one-ds4, or eight.");
+                        throw new ArgumentException("--mode requires one-x360, one-ds4, two-x360, or eight.");
                     }
 
                     mode = args[index].ToLowerInvariant() switch
                     {
                         "one-x360" => DiagnosticMode.OneX360,
                         "one-ds4" => DiagnosticMode.OneDs4,
+                        "two-x360" => DiagnosticMode.TwoX360,
                         "eight" or "eight-targets" => DiagnosticMode.EightTargets,
-                        _ => throw new ArgumentException("--mode requires one-x360, one-ds4, or eight.")
+                        _ => throw new ArgumentException("--mode requires one-x360, one-ds4, two-x360, or eight.")
                     };
                     break;
                 case "--duration-seconds":
@@ -153,6 +155,7 @@ internal sealed record DiagnosticOptions(
         Console.WriteLine("Usage: dotnet run --project windows/tools/Pulgapp.DriverDiagnostics -- [options]");
         Console.WriteLine("  --mode one-x360       Create and exercise one X360 target.");
         Console.WriteLine("  --mode one-ds4        Create and exercise one DS4 target.");
+        Console.WriteLine("  --mode two-x360       Create and exercise two X360 targets.");
         Console.WriteLine("  --mode eight           Create four X360 and four DS4 targets.");
         Console.WriteLine("  --duration-seconds N   Hold deterministic states for N seconds (default: 30).");
         Console.WriteLine("  --wait-for-cancel      Hold targets until Ctrl+C; overrides --duration-seconds.");
@@ -266,13 +269,19 @@ internal sealed class DiagnosticRun : IDisposable
             throw new InvalidOperationException("ViGEm client is not initialized.");
         }
 
-        var targetCount = _options.Mode == DiagnosticMode.EightTargets ? 8 : 1;
+        var targetCount = _options.Mode switch
+        {
+            DiagnosticMode.EightTargets => 8,
+            DiagnosticMode.TwoX360 => 2,
+            _ => 1
+        };
         for (var index = 0; index < targetCount; index++)
         {
             var kind = _options.Mode switch
             {
                 DiagnosticMode.OneX360 => DiagnosticTargetKind.X360,
                 DiagnosticMode.OneDs4 => DiagnosticTargetKind.Ds4,
+                DiagnosticMode.TwoX360 => DiagnosticTargetKind.X360,
                 DiagnosticMode.EightTargets when index < 4 => DiagnosticTargetKind.X360,
                 DiagnosticMode.EightTargets => DiagnosticTargetKind.Ds4,
                 _ => throw new InvalidOperationException("Unknown diagnostic mode.")

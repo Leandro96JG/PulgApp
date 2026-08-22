@@ -92,7 +92,12 @@ The process writes `All targets remain neutral.`, a 60-second join-pulse schedul
 
 ## Test E: It Takes Two
 
-1. Start two X360 targets only.
+1. Start two neutral X360 targets and schedule the join/exercise states:
+
+```powershell
+dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64 -- --mode two-x360 --wait-for-cancel --join-after-seconds 60 --exercise-after-seconds 180
+```
+
 2. Launch the game with the documented Steam Input setting.
 3. Join both local players.
 4. Confirm independent movement and actions.
