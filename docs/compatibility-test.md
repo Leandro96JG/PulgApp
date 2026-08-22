@@ -82,13 +82,13 @@ For each variant:
 
 Pass requires eight independently controllable in-game players. Seeing eight Windows devices is not sufficient.
 
-Use a terminal opened manually before launching the diagnostic. For `joy.cpl`, keep the deterministic states. For Pummel Party, start the targets neutral and schedule one brief join pulse after enough time to open the local lobby. The recommended game command is:
+Use a terminal opened manually before launching the diagnostic. For `joy.cpl`, keep the deterministic states. For Pummel Party, start the targets neutral, schedule one brief join pulse after enough time to open the local lobby, then schedule distinct held inputs after the match begins. The recommended game command is:
 
 ```powershell
-dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64 -- --mode eight --wait-for-cancel --join-after-seconds 60
+dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64 -- --mode eight --wait-for-cancel --join-after-seconds 60 --exercise-after-seconds 180
 ```
 
-The process writes `All targets remain neutral.` and a 60-second join-pulse schedule. Start Pummel Party and reach its local lobby before the pulse. It then sends A/Cross for 500 ms to all eight targets and returns them to neutral. The targets remain present until `Ctrl+C` is pressed in that terminal. If 60 seconds is insufficient, rerun with a longer delay.
+The process writes `All targets remain neutral.`, a 60-second join-pulse schedule, and a 180-second distinct-state exercise schedule. Reach the local lobby before the join pulse, then start a match before the exercise. The join pulse sends A/Cross for 500 ms to all eight targets and returns them to neutral. The later exercise applies a different held button/stick state to each target so independent players must react differently. The targets remain present until `Ctrl+C` is pressed in that terminal. Increase either delay if it is insufficient.
 
 ## Test E: It Takes Two
 
@@ -105,7 +105,7 @@ The process writes `All targets remain neutral.` and a 60-second join-pulse sche
 | One X360 | Pass | 1 | User reported 2026-08-22: recognized as Xbox controller and works in games. |
 | One DS4 | Pass | 1 | User reported 2026-08-22: recognized as Wireless Controller and works in games. |
 | Four X360 + four DS4 in Windows | Pass | 8 | User reported 2026-08-22: all eight devices recognized simultaneously. |
-| Pummel D1 | Pending | 0 | |
+| Pummel D1 | Partial | 8 | User reported 2026-08-22: all eight players joined; independent in-match movement remains pending. |
 | Pummel D2 | Pending | 0 | |
 | Pummel D3 | Pending | 0 | |
 | It Takes Two | Pending | 0 | |

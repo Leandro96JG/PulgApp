@@ -57,6 +57,7 @@ internal sealed record DiagnosticOptions(
     TimeSpan? Duration,
     bool StartNeutral,
     TimeSpan? JoinAfter,
+    TimeSpan? ExerciseAfter,
     bool ShowHelp)
 {
     public static DiagnosticOptions Parse(string[] args)
@@ -66,6 +67,7 @@ internal sealed record DiagnosticOptions(
         var waitForCancel = false;
         var startNeutral = false;
         TimeSpan? joinAfter = null;
+        TimeSpan? exerciseAfter = null;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -73,7 +75,7 @@ internal sealed record DiagnosticOptions(
             {
                 case "--help":
                 case "-h":
-                    return new DiagnosticOptions(mode, duration, startNeutral, joinAfter, true);
+                    return new DiagnosticOptions(mode, duration, startNeutral, joinAfter, exerciseAfter, true);
                 case "--mode":
                     if (++index >= args.Length)
                     {
@@ -115,17 +117,34 @@ internal sealed record DiagnosticOptions(
                     joinAfter = TimeSpan.FromSeconds(joinSeconds);
                     startNeutral = true;
                     break;
+                case "--exercise-after-seconds":
+                    if (++index >= args.Length ||
+                        !double.TryParse(args[index], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var exerciseSeconds) ||
+                        exerciseSeconds < 0)
+                    {
+                        throw new ArgumentException("--exercise-after-seconds requires a non-negative number.");
+                    }
+
+                    exerciseAfter = TimeSpan.FromSeconds(exerciseSeconds);
+                    startNeutral = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown argument '{args[index]}'. Use --help for usage.");
             }
         }
 
-        if (joinAfter is not null && !waitForCancel)
+        if ((joinAfter is not null || exerciseAfter is not null) && !waitForCancel)
         {
-            throw new ArgumentException("--join-after-seconds requires --wait-for-cancel.");
+            throw new ArgumentException("Scheduled game states require --wait-for-cancel.");
         }
 
-        return new DiagnosticOptions(mode, waitForCancel ? null : duration, startNeutral, joinAfter, false);
+        if (joinAfter is { } joinDelay && exerciseAfter is { } exerciseDelay &&
+            exerciseDelay <= joinDelay + TimeSpan.FromMilliseconds(500))
+        {
+            throw new ArgumentException("--exercise-after-seconds must occur after the join pulse finishes.");
+        }
+
+        return new DiagnosticOptions(mode, waitForCancel ? null : duration, startNeutral, joinAfter, exerciseAfter, false);
     }
 
     public static void PrintHelp()
@@ -139,6 +158,7 @@ internal sealed record DiagnosticOptions(
         Console.WriteLine("  --wait-for-cancel      Hold targets until Ctrl+C; overrides --duration-seconds.");
         Console.WriteLine("  --start-neutral        Keep all targets neutral instead of applying test states.");
         Console.WriteLine("  --join-after-seconds N Start neutral, then pulse A/Cross on all targets after N seconds; requires --wait-for-cancel.");
+        Console.WriteLine("  --exercise-after-seconds N Start neutral, then apply distinct held test states after N seconds; requires --wait-for-cancel.");
         Console.WriteLine("  --help                 Show this help.");
     }
 }
@@ -217,6 +237,9 @@ internal sealed class DiagnosticRun : IDisposable
         var joinTask = _options.JoinAfter is { } joinAfter
             ? PulseJoinAfterDelayAsync(joinAfter, cancellationToken)
             : Task.CompletedTask;
+        var exerciseTask = _options.ExerciseAfter is { } exerciseAfter
+            ? ApplyDeterministicStatesAfterDelayAsync(exerciseAfter, cancellationToken)
+            : Task.CompletedTask;
         Console.WriteLine(_options.Duration is null
             ? "Press Ctrl+C to neutralize and disconnect targets."
             : "Press Ctrl+C to stop early.");
@@ -230,7 +253,7 @@ internal sealed class DiagnosticRun : IDisposable
             Console.WriteLine("Cancellation requested; neutralizing targets.");
         }
 
-        await joinTask;
+        await Task.WhenAll(joinTask, exerciseTask);
         NeutralizeTargets();
         Console.WriteLine("All targets neutralized.");
         return 0;
@@ -297,6 +320,21 @@ internal sealed class DiagnosticRun : IDisposable
             await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
             NeutralizeTargets();
             Console.WriteLine("Join pulse released; all targets returned to neutral.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller awaits this task before cleanup so no target receives concurrent reports.
+        }
+    }
+
+    private async Task ApplyDeterministicStatesAfterDelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Console.WriteLine($"Distinct-state exercise scheduled in {delay.TotalSeconds:0.###}s.");
+            await Task.Delay(delay, cancellationToken);
+            ApplyDeterministicStates();
+            Console.WriteLine("Distinct test states submitted; inspect independent in-game input, then press Ctrl+C.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
