@@ -30,9 +30,9 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P0 - Toolchain, protocol fixture, and driver compatibility spike`
-- Next task: `P0-04`
-- Last completed task: `P0-03`
-- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human driver and game checks remain pending.
+- Next task: `P0-05`
+- Last completed task: `P0-04`
+- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human Windows and game checks for the eight-player compatibility gate remain pending.
 - Blocking gate: Pummel Party must recognize four X360 plus four DS4 virtual targets.
 
 ## Repository Shape
@@ -130,14 +130,21 @@ Evidence (2026-08-05):
 
 ### P0-04 Implement driver diagnostics
 
-- [ ] Detect and classify ViGEm bus missing, access failure, and version mismatch errors.
-- [ ] Create one neutral X360 target, submit deterministic test states, neutralize, and disconnect.
-- [ ] Create one neutral DS4 target and repeat the test.
-- [ ] Create four X360 and four DS4 targets simultaneously.
-- [ ] Always neutralize and dispose every successfully created target on cancellation, failure, or process exit.
-- [ ] Keep diagnostics isolated from the production WPF composition root.
+- [x] Detect and classify ViGEm bus missing, access failure, and version mismatch errors.
+- [x] Create one neutral X360 target, submit deterministic test states, neutralize, and disconnect.
+- [x] Create one neutral DS4 target and repeat the test.
+- [x] Create four X360 and four DS4 targets simultaneously.
+- [x] Always neutralize and dispose every successfully created target on cancellation, failure, or process exit.
+- [x] Keep diagnostics isolated from the production WPF composition root.
 
-Evidence: pending.
+Evidence (2026-08-05):
+- Automated: `dotnet build windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated driver smoke: `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode one-x360 --duration-seconds 1` -> PASS, one X360 target connected, received neutral and deterministic complete reports, then neutralized and disposed.
+- Automated driver smoke: `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode one-ds4 --duration-seconds 1` -> PASS, one DS4 target connected, received neutral and deterministic complete reports, then neutralized and disposed.
+- Automated driver smoke: `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode eight --duration-seconds 0` -> PASS, four X360 and four DS4 targets connected simultaneously, received deterministic states, then all eight were neutralized and disposed.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 driver-free tests.
+- Artifacts: `windows/tools/Pulgapp.DriverDiagnostics/Program.cs`, `AGENTS.md`, `docs/acceptance.md`.
+- Exceptions: P0-05 Windows device observation and Pummel Party/It Takes Two compatibility checks remain pending human hardware/game verification.
 
 ### P0-05 Execute the eight-player compatibility gate
 

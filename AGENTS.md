@@ -18,7 +18,7 @@ dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.
 dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64
 ```
 
-`dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build` is hardware-only and must not run in normal driver-free CI.
+`dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64` is hardware-only and must not run in normal driver-free CI.
 
 ## Product Constraints
 
