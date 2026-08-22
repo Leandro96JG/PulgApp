@@ -150,7 +150,7 @@ Evidence (2026-08-05):
 
 - [ ] Follow `docs/compatibility-test.md` on a real PC.
 - [x] Verify one X360 and one DS4 in Windows.
-- [ ] Verify four X360 and four DS4 in Windows.
+- [x] Verify four X360 and four DS4 in Windows.
 - [ ] Test Pummel Party with Steam Input disabled.
 - [ ] If needed, test the documented Steam Input variants without running DS4Windows or XOutput.
 - [ ] Record whether all eight devices can join independently inside Pummel Party.
@@ -161,7 +161,8 @@ Gate `G0`: PASS only if Pummel Party accepts eight independent inputs. If it fai
 Evidence (2026-08-22):
 - Manual, user reported: one X360 virtual target is recognized as an Xbox controller in Windows and works correctly in games.
 - Manual, user reported: one DS4 virtual target is recognized as a Wireless Controller in Windows and works correctly in games.
-- Remaining: four X360 plus four DS4 simultaneous Windows observation, Pummel Party eight-player test, Steam Input variants if needed, and It Takes Two two-X360 test.
+- Manual, user reported: four X360 plus four DS4 virtual targets are recognized simultaneously in Windows.
+- Remaining: Pummel Party eight-player test, Steam Input variants if needed, and It Takes Two two-X360 test.
 
 ## Phase P1: One Android Phone To One X360
 
