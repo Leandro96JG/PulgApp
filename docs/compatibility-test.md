@@ -94,8 +94,8 @@ Pass requires eight independently controllable in-game players. Seeing eight Win
 
 | Test | Result | Observed count | Notes/artifacts |
 |---|---|---:|---|
-| One X360 | Pending | 0 | |
-| One DS4 | Pending | 0 | |
+| One X360 | Pass | 1 | User reported 2026-08-22: recognized as Xbox controller and works in games. |
+| One DS4 | Pass | 1 | User reported 2026-08-22: recognized as Wireless Controller and works in games. |
 | Four X360 + four DS4 in Windows | Pending | 0 | |
 | Pummel D1 | Pending | 0 | |
 | Pummel D2 | Pending | 0 | |
