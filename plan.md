@@ -29,11 +29,11 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 
 ## Current Status
 
-- Current phase: `P0 - Toolchain, protocol fixture, and driver compatibility spike`
-- Next task: `P0-05`
-- Last completed task: `P0-04`
-- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host. Human Windows and game checks for the eight-player compatibility gate remain pending.
-- Blocking gate: Pummel Party must recognize four X360 plus four DS4 virtual targets.
+- Current phase: `P1 - One Android phone to one X360`
+- Next task: `P1-01`
+- Last completed task: `P0-05`
+- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
+- Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 
 ## Repository Shape
 
@@ -151,13 +151,13 @@ Evidence (2026-08-05):
 
 ### P0-05 Execute the eight-player compatibility gate
 
-- [ ] Follow `docs/compatibility-test.md` on a real PC.
+- [x] Follow `docs/compatibility-test.md` on a real PC.
 - [x] Verify one X360 and one DS4 in Windows.
 - [x] Verify four X360 and four DS4 in Windows.
 - [x] Test Pummel Party with Steam Input disabled.
-- [ ] If needed, test the documented Steam Input variants without running DS4Windows or XOutput.
+- [x] If needed, test the documented Steam Input variants without running DS4Windows or XOutput.
 - [x] Record whether all eight devices can join independently inside Pummel Party.
-- [ ] Record It Takes Two behavior with two X360 targets.
+- [x] Record It Takes Two behavior with two X360 targets.
 
 Gate `G0`: PASS only if Pummel Party accepts eight independent inputs. If it fails, stop product implementation and document the exact failure. Do not invent a fallback target type.
 
@@ -168,7 +168,8 @@ Evidence (2026-08-22):
 - Manual, user reported: with Steam Input disabled, Pummel Party accepted joins from all eight virtual targets.
 - Manual, user reported: Pummel Party accepts eight independent inputs during a real match.
 - Gate G0: PASS. Steam Input variants are not needed because the disabled configuration works.
-- Remaining: It Takes Two two-X360 test.
+- Manual, user reported: It Takes Two accepts two independent X360 virtual targets.
+- P0-05: PASS. Proceed to P1-01.
 
 ## Phase P1: One Android Phone To One X360
 

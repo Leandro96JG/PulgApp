@@ -113,7 +113,7 @@ dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagn
 | Pummel D1 | Pass | 8 | User reported 2026-08-22: all eight players joined and responded independently in a match. |
 | Pummel D2 | Pending | 0 | |
 | Pummel D3 | Pending | 0 | |
-| It Takes Two | Pending | 0 | |
+| It Takes Two | Pass | 2 | User reported 2026-08-22: two X360 targets work independently. |
 
 ## Failure Recording
 
