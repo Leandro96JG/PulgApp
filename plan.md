@@ -145,6 +145,7 @@ Evidence (2026-08-05):
 - Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 driver-free tests.
 - Automated (2026-08-22): diagnostic `--help` -> PASS, `--wait-for-cancel` is available for manual Windows/game checks and keeps targets active until Ctrl+C.
 - Manual (2026-08-22), user reported: eight targets remain active while switching to `joy.cpl` when diagnostics runs with `--wait-for-cancel`.
+- Automated (2026-08-22): diagnostics supports neutral game startup plus one scheduled A/Cross join pulse, so its Windows inspection states do not hold game menus open.
 - Artifacts: `windows/tools/Pulgapp.DriverDiagnostics/Program.cs`, `AGENTS.md`, `docs/acceptance.md`.
 - Exceptions: P0-05 Windows device observation and Pummel Party/It Takes Two compatibility checks remain pending human hardware/game verification.
 

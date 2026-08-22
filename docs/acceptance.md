@@ -29,7 +29,7 @@ The completed command table must contain:
 | One C# test | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"` |
 | One C# project | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build` |
 | All driver-free C# tests | `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` |
-| Driver diagnostics | `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64` (hardware-only) |
+| Driver diagnostics | `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64` (hardware-only; do not use `--no-build`) |
 | Flutter dependencies | Pending P1-05 mobile bootstrap |
 | One Dart test | Pending P1-05 mobile bootstrap |
 | Flutter analyze | Pending P1-05 mobile bootstrap |

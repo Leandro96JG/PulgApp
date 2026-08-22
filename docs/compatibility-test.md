@@ -82,13 +82,13 @@ For each variant:
 
 Pass requires eight independently controllable in-game players. Seeing eight Windows devices is not sufficient.
 
-Use a terminal opened manually before launching the diagnostic. Keep it open while switching to `joy.cpl` or the game. The recommended command is:
+Use a terminal opened manually before launching the diagnostic. For `joy.cpl`, keep the deterministic states. For Pummel Party, start the targets neutral and schedule one brief join pulse after enough time to open the local lobby. The recommended game command is:
 
 ```powershell
-dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release --no-build -p:Platform=x64 -- --mode eight --wait-for-cancel
+dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64 -- --mode eight --wait-for-cancel --join-after-seconds 60
 ```
 
-The targets remain present until `Ctrl+C` is pressed in that terminal. The process writes `duration=until Ctrl+C` at startup; if it prints `All targets neutralized.` before then, record the preceding output as a diagnostic failure.
+The process writes `All targets remain neutral.` and a 60-second join-pulse schedule. Start Pummel Party and reach its local lobby before the pulse. It then sends A/Cross for 500 ms to all eight targets and returns them to neutral. The targets remain present until `Ctrl+C` is pressed in that terminal. If 60 seconds is insufficient, rerun with a longer delay.
 
 ## Test E: It Takes Two
 

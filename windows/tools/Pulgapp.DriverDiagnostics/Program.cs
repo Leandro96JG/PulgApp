@@ -52,13 +52,20 @@ internal enum DiagnosticMode
     EightTargets
 }
 
-internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan? Duration, bool ShowHelp)
+internal sealed record DiagnosticOptions(
+    DiagnosticMode Mode,
+    TimeSpan? Duration,
+    bool StartNeutral,
+    TimeSpan? JoinAfter,
+    bool ShowHelp)
 {
     public static DiagnosticOptions Parse(string[] args)
     {
         var mode = DiagnosticMode.EightTargets;
         var duration = TimeSpan.FromSeconds(30);
         var waitForCancel = false;
+        var startNeutral = false;
+        TimeSpan? joinAfter = null;
 
         for (var index = 0; index < args.Length; index++)
         {
@@ -66,7 +73,7 @@ internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan? Duration
             {
                 case "--help":
                 case "-h":
-                    return new DiagnosticOptions(mode, duration, true);
+                    return new DiagnosticOptions(mode, duration, startNeutral, joinAfter, true);
                 case "--mode":
                     if (++index >= args.Length)
                     {
@@ -94,12 +101,31 @@ internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan? Duration
                 case "--wait-for-cancel":
                     waitForCancel = true;
                     break;
+                case "--start-neutral":
+                    startNeutral = true;
+                    break;
+                case "--join-after-seconds":
+                    if (++index >= args.Length ||
+                        !double.TryParse(args[index], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var joinSeconds) ||
+                        joinSeconds < 0)
+                    {
+                        throw new ArgumentException("--join-after-seconds requires a non-negative number.");
+                    }
+
+                    joinAfter = TimeSpan.FromSeconds(joinSeconds);
+                    startNeutral = true;
+                    break;
                 default:
                     throw new ArgumentException($"Unknown argument '{args[index]}'. Use --help for usage.");
             }
         }
 
-        return new DiagnosticOptions(mode, waitForCancel ? null : duration, false);
+        if (joinAfter is not null && !waitForCancel)
+        {
+            throw new ArgumentException("--join-after-seconds requires --wait-for-cancel.");
+        }
+
+        return new DiagnosticOptions(mode, waitForCancel ? null : duration, startNeutral, joinAfter, false);
     }
 
     public static void PrintHelp()
@@ -111,6 +137,8 @@ internal sealed record DiagnosticOptions(DiagnosticMode Mode, TimeSpan? Duration
         Console.WriteLine("  --mode eight           Create four X360 and four DS4 targets.");
         Console.WriteLine("  --duration-seconds N   Hold deterministic states for N seconds (default: 30).");
         Console.WriteLine("  --wait-for-cancel      Hold targets until Ctrl+C; overrides --duration-seconds.");
+        Console.WriteLine("  --start-neutral        Keep all targets neutral instead of applying test states.");
+        Console.WriteLine("  --join-after-seconds N Start neutral, then pulse A/Cross on all targets after N seconds; requires --wait-for-cancel.");
         Console.WriteLine("  --help                 Show this help.");
     }
 }
@@ -176,10 +204,22 @@ internal sealed class DiagnosticRun : IDisposable
         }
 
         Console.WriteLine($"Created {_targets.Count} target(s). Initial state is neutral.");
-        ApplyDeterministicStates();
+        if (_options.StartNeutral)
+        {
+            Console.WriteLine("All targets remain neutral.");
+        }
+        else
+        {
+            ApplyDeterministicStates();
+            Console.WriteLine("Deterministic test states submitted.");
+        }
+
+        var joinTask = _options.JoinAfter is { } joinAfter
+            ? PulseJoinAfterDelayAsync(joinAfter, cancellationToken)
+            : Task.CompletedTask;
         Console.WriteLine(_options.Duration is null
-            ? "Deterministic test states submitted. Press Ctrl+C to neutralize and disconnect targets."
-            : "Deterministic test states submitted. Press Ctrl+C to stop early.");
+            ? "Press Ctrl+C to neutralize and disconnect targets."
+            : "Press Ctrl+C to stop early.");
 
         try
         {
@@ -190,6 +230,7 @@ internal sealed class DiagnosticRun : IDisposable
             Console.WriteLine("Cancellation requested; neutralizing targets.");
         }
 
+        await joinTask;
         NeutralizeTargets();
         Console.WriteLine("All targets neutralized.");
         return 0;
@@ -238,6 +279,28 @@ internal sealed class DiagnosticRun : IDisposable
         foreach (var target in _targets)
         {
             target.Neutralize();
+        }
+    }
+
+    private async Task PulseJoinAfterDelayAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Console.WriteLine($"Join pulse scheduled in {delay.TotalSeconds:0.###}s.");
+            await Task.Delay(delay, cancellationToken);
+            foreach (var target in _targets)
+            {
+                target.ApplyJoinState();
+            }
+
+            Console.WriteLine("Join pulse submitted to all targets.");
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            NeutralizeTargets();
+            Console.WriteLine("Join pulse released; all targets returned to neutral.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller awaits this task before cleanup so no target receives concurrent reports.
         }
     }
 
@@ -338,6 +401,21 @@ internal sealed class DiagnosticTarget : IDisposable
 
         _controller.SubmitReport();
         Console.WriteLine($"Submitted deterministic state for {_label}.");
+    }
+
+    public void ApplyJoinState()
+    {
+        _controller.ResetReport();
+        if (_kind == DiagnosticTargetKind.X360)
+        {
+            ((IXbox360Controller)_controller).SetButtonsFull(0x1000);
+        }
+        else
+        {
+            ((IDualShock4Controller)_controller).SetButtonsFull(0x0020);
+        }
+
+        _controller.SubmitReport();
     }
 
     private static DualShock4DPadDirection CreateDpadDirection(int stateIndex)
