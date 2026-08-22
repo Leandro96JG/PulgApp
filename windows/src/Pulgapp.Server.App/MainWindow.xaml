@@ -3,10 +3,77 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Pulgapp.Server.App"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="Pulgapp Server" Height="620" Width="760" MinHeight="580" MinWidth="680"
+        Closing="Window_Closing">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="16" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
+        <StackPanel>
+            <TextBlock FontSize="28" FontWeight="SemiBold" Text="Pulgapp" />
+            <TextBlock Foreground="DimGray" Text="LAN gamepad server" />
+        </StackPanel>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <GroupBox Header="Server" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="Status" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ServerStatusText" Margin="0,2,0,10" />
+                    <TextBlock Text="Driver" FontWeight="SemiBold" />
+                    <TextBlock x:Name="DriverStatusText" Margin="0,2,0,10" />
+                    <TextBlock Text="TCP / UDP ports" FontWeight="SemiBold" />
+                    <TextBlock x:Name="PortsText" Margin="0,2,0,10" />
+                    <TextBlock Text="PIN" FontWeight="SemiBold" />
+                    <TextBlock x:Name="PinText" FontSize="24" FontFamily="Consolas" Margin="0,2,0,0" />
+                </StackPanel>
+            </GroupBox>
+            <GroupBox Grid.Column="2" Header="LAN addresses" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="Connect a phone to any of these IPv4 addresses:" TextWrapping="Wrap" />
+                    <TextBlock x:Name="AddressesText" Margin="0,8,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+            </GroupBox>
+        </Grid>
+
+        <GroupBox Grid.Row="4" Header="Slot 1 - Xbox 360" Padding="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Client" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ClientNameText" Margin="0,2,0,10" />
+                    <TextBlock Text="Connection" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ConnectionStateText" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="Last input age" FontWeight="SemiBold" />
+                    <TextBlock x:Name="LastInputAgeText" Margin="0,2,0,10" />
+                    <TextBlock Text="Packet rate / RTT" FontWeight="SemiBold" />
+                    <TextBlock x:Name="MetricsText" Margin="0,2,0,0" />
+                </StackPanel>
+            </Grid>
+        </GroupBox>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="StartButton" Width="104" Margin="0,0,8,0" Click="StartButton_Click">Start Server</Button>
+            <Button x:Name="StopButton" Width="104" Margin="0,0,8,0" Click="StopButton_Click">Stop Server</Button>
+            <Button x:Name="RegeneratePinButton" Width="112" Margin="0,0,8,0" Click="RegeneratePinButton_Click">Regenerate PIN</Button>
+            <Button x:Name="KickButton" Width="80" Click="KickButton_Click">Kick</Button>
+        </StackPanel>
     </Grid>
 </Window>

@@ -100,6 +100,12 @@
         }
       },
       "pulgapp.server.core": {
+        "type": "Project",
+        "dependencies": {
+          "Pulgapp.Server.Protocol": "[1.0.0, )"
+        }
+      },
+      "pulgapp.server.protocol": {
         "type": "Project"
       }
     }

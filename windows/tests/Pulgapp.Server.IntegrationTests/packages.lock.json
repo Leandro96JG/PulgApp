@@ -113,7 +113,10 @@
         }
       },
       "pulgapp.server.core": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Pulgapp.Server.Protocol": "[1.0.0, )"
+        }
       },
       "pulgapp.server.infrastructure": {
         "type": "Project",

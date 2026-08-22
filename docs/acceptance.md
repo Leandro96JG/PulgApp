@@ -26,15 +26,21 @@ The completed command table must contain:
 |---|---|
 | Windows restore | `dotnet restore windows/Pulgapp.sln --force-evaluate` |
 | Windows build | `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` |
-| One C# test | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"` |
-| One C# project | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build` |
+| One C# test | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~UdpInputDecoderTests"` |
+| One C# project | `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64` |
+| Core focused test | `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~SessionCoordinatorTests"` |
+| Core test project | `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64` |
+| Infrastructure focused test | `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~X360ReportMapperTests"` |
+| Infrastructure test project | `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64` |
+| Transport focused test | `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` |
+| Transport test project | `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` |
 | All driver-free C# tests | `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` |
 | Driver diagnostics | `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64` (hardware-only; do not use `--no-build`) |
-| Flutter dependencies | Pending P1-05 mobile bootstrap |
-| One Dart test | Pending P1-05 mobile bootstrap |
-| Flutter analyze | Pending P1-05 mobile bootstrap |
-| All mobile tests | Pending P1-05 mobile bootstrap |
-| APK build | Pending P1-05 mobile bootstrap |
+| Dart protocol dependencies | From `mobile/`: `dart pub get` |
+| One Dart test | From `mobile/`: `dart test test/protocol_test.dart` |
+| Dart analyze | From `mobile/`: `dart analyze` |
+| All Dart protocol tests | From `mobile/`: `dart test` |
+| APK build | From `mobile/`: `flutter build apk --debug --no-pub` |
 
 ## Global Safety Acceptance
 

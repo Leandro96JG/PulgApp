@@ -30,9 +30,9 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P1 - One Android phone to one X360`
-- Next task: `P1-01`
-- Last completed task: `P0-05`
-- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
+- Next task: `P1-06` follow-up: recover the mobile UI after an invalid PIN
+- Last completed task: `P1-06` verification, except the invalid-PIN recovery defect, explicit simultaneous-input evidence, and timing measurements
+- Blockers: The mobile app becomes unusable after rejecting an invalid PIN, so the user cannot enter the correct PIN without restarting/recovering the app. Explicit stick + button + trigger simultaneous-input evidence and measured UDP/neutralization timing are also still pending. Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 
 ## Repository Shape
@@ -177,73 +177,135 @@ Goal: deliver one complete low-latency and fail-safe path using the final protoc
 
 ### P1-01 Implement protocol models and codecs
 
-- [ ] Implement C# control DTOs and strict UDP v1 decoding in `Pulgapp.Server.Protocol`.
-- [ ] Implement Dart control DTOs and UDP v1 encoding.
-- [ ] Make both test suites consume `protocol/fixtures/input-state-v1.bin` from the repository root.
-- [ ] Test all offsets, endianness, ranges, invalid length, magic, version, type, flags, and reserved button handling.
-- [ ] Implement modular `uint32` sequence comparison and wrap tests.
+- [x] Implement C# control DTOs and strict UDP v1 decoding in `Pulgapp.Server.Protocol`.
+- [x] Implement Dart control DTOs and UDP v1 encoding.
+- [x] Make both test suites consume `protocol/fixtures/input-state-v1.bin` from the repository root.
+- [x] Test all offsets, endianness, ranges, invalid length, magic, version, type, flags, and reserved button handling.
+- [x] Implement modular `uint32` sequence comparison and wrap tests.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~UdpInputDecoderTests"` -> PASS, 13/13 tests.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 13/13 tests.
+- Automated: from `mobile/`, `dart test test/protocol_test.dart` -> PASS, 3/3 tests; `dart analyze` -> PASS, no issues; `dart test` -> PASS, 3/3 tests.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 16/16 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.Protocol/ControlMessages.cs`, `windows/src/Pulgapp.Server.Protocol/InputSnapshot.cs`, `windows/src/Pulgapp.Server.Protocol/UdpInputDecoder.cs`, `windows/tests/Pulgapp.Server.Protocol.Tests/UdpInputDecoderTests.cs`, `mobile/lib/protocol.dart`, `mobile/test/protocol_test.dart`, `mobile/pubspec.yaml`, `mobile/pubspec.lock`.
+- Exceptions: Flutter Android/iOS scaffolding and hardware/game checks remain pending P1-05 and P1-06.
 
 ### P1-02 Implement the driver-independent core
 
-- [ ] Add immutable canonical `GamepadState` with neutral singleton.
-- [ ] Add `VirtualController` and `VirtualControllerFactory` seams described in `docs/architecture.md`.
-- [ ] Add pure X360 report mapping tests before using ViGEm.
-- [ ] Add `SessionCoordinator` for one slot with token validation and a 250 ms watchdog.
-- [ ] Use `TimeProvider` so timeout tests do not sleep.
-- [ ] Ensure WebSocket loss, explicit leave, timeout, shutdown, and cancellation all reach neutralization.
+- [x] Add immutable canonical `GamepadState` with neutral singleton.
+- [x] Add `VirtualController` and `VirtualControllerFactory` seams described in `docs/architecture.md`.
+- [x] Add pure X360 report mapping tests before using ViGEm.
+- [x] Add `SessionCoordinator` for one slot with token validation and a 250 ms watchdog.
+- [x] Use `TimeProvider` so timeout tests do not sleep.
+- [x] Ensure WebSocket loss, explicit leave, timeout, shutdown, and cancellation all reach neutralization.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~SessionCoordinatorTests"` -> PASS, 8/8 tests.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 8/8 tests.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~X360ReportMapperTests"` -> PASS, 7/7 tests.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 7/7 tests.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 29/29 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.Core/GamepadState.cs`, `windows/src/Pulgapp.Server.Core/VirtualController.cs`, `windows/src/Pulgapp.Server.Core/SessionCoordinator.cs`, `windows/src/Pulgapp.Server.Infrastructure/X360ReportMapper.cs`, `windows/tests/Pulgapp.Server.Core.Tests/SessionCoordinatorTests.cs`, `windows/tests/Pulgapp.Server.Infrastructure.Tests/X360ReportMapperTests.cs`.
+- Exceptions: ViGEm calls, network transport, Flutter Android/iOS scaffolding, and hardware/game checks remain pending P1-03 through P1-06.
 
 ### P1-03 Implement Windows transport and X360 adapter
 
-- [ ] Host `GET /health` and WebSocket `/control` on TCP 26760.
-- [ ] Bind one IPv4 UDP socket on port 26761.
-- [ ] Implement hello, welcome, ping/pong, input-ready, status, leave, suspend, and errors exactly as specified.
-- [ ] Generate PIN and tokens cryptographically; never log their values.
-- [ ] Validate UDP source IP against the WebSocket peer.
-- [ ] Set `AutoSubmitReport = false`, update the complete X360 report, and submit once.
-- [ ] Serialize updates through a bounded per-session worker, never on the WPF dispatcher.
+- [x] Host `GET /health` and WebSocket `/control` on TCP 26760.
+- [x] Bind one IPv4 UDP socket on port 26761.
+- [x] Implement hello, welcome, ping/pong, input-ready, status, leave, suspend, and errors exactly as specified.
+- [x] Generate PIN and tokens cryptographically; never log their values.
+- [x] Validate UDP source IP against the WebSocket peer.
+- [x] Set `AutoSubmitReport = false`, update the complete X360 report, and submit once.
+- [x] Serialize updates through a bounded per-session worker, never on the WPF dispatcher.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: `dotnet restore windows/Pulgapp.sln --force-evaluate` -> PASS, all 10 projects restored with lockfiles updated.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` -> PASS, 2/2 tests, duration 701 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 2/2 tests, duration 1 s.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 30/30 driver-free tests.
+- Automated: from `mobile/`, `dart test test/protocol_test.dart` -> PASS, 3/3 tests; `dart analyze` -> PASS, no issues; `dart test` -> PASS, 3/3 tests.
+- Artifacts: `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/src/Pulgapp.Server.Infrastructure/X360VirtualController.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`, `windows/Pulgapp.sln`, `AGENTS.md`, `docs/acceptance.md`.
+- Exceptions: Physical Android, ViGEm driver, Windows controller, and game checks remain pending human verification in P1-06.
 
 ### P1-04 Implement the minimal WPF dashboard
 
-- [ ] Show driver status, server status, candidate LAN IPv4 addresses, ports, and PIN.
-- [ ] Show one slot with client name, connection state, last input age, packet rate, and RTT.
-- [ ] Provide Regenerate PIN, Kick, Start Server, and Stop Server actions.
-- [ ] Stop accepting connections before neutralizing and disposing targets during shutdown.
-- [ ] Keep normal runtime non-elevated.
+- [x] Show driver status, server status, candidate LAN IPv4 addresses, ports, and PIN.
+- [x] Show one slot with client name, connection state, last input age, packet rate, and RTT.
+- [x] Provide Regenerate PIN, Kick, Start Server, and Stop Server actions.
+- [x] Stop accepting connections before neutralizing and disposing targets during shutdown.
+- [x] Keep normal runtime non-elevated.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` -> PASS, 3/3 tests, duration 652 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 3/3 tests, duration 1 s.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
+- Automated: from `mobile/`, `dart test test/protocol_test.dart` -> PASS, 3/3 tests; `dart analyze` -> PASS, no issues; `dart test` -> PASS, 3/3 tests.
+- Artifacts: `windows/src/Pulgapp.Server.App/MainWindow.xaml`, `windows/src/Pulgapp.Server.App/MainWindow.xaml.cs`, `windows/src/Pulgapp.Server.App/app.manifest`, `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`.
+- Exceptions: Physical Android, ViGEm driver, Windows controller, and game checks remain pending human verification in P1-06.
 
 ### P1-05 Bootstrap and implement the Flutter client
 
-- [ ] Create Flutter project under `mobile/` with Android and iOS scaffolds.
-- [ ] Set Android min SDK 26, landscape orientation, cleartext LAN network configuration, Internet permission, vibration permission, and screen-awake behavior.
-- [ ] Persist a random client UUID and the last successful endpoint.
-- [ ] Implement manual IPv4/hostname plus six-digit PIN connection UI.
-- [ ] Implement one connection module that owns WebSocket, UDP, tokens, state, and cleanup.
-- [ ] Implement the 120 Hz cap, 50 ms unchanged heartbeat, and immediate neutral snapshots.
-- [ ] Implement raw multitouch controls with pointer IDs, including pointer cancellation.
-- [ ] Use canonical Xbox labels and canonical Y-positive-up values.
+- [x] Create Flutter project under `mobile/` with Android and iOS scaffolds.
+- [x] Set Android min SDK 26, landscape orientation, cleartext LAN network configuration, Internet permission, vibration permission, and screen-awake behavior.
+- [x] Persist a random client UUID and the last successful endpoint.
+- [x] Implement manual IPv4/hostname plus six-digit PIN connection UI.
+- [x] Implement one connection module that owns WebSocket, UDP, tokens, state, and cleanup.
+- [x] Implement the 120 Hz cap, 50 ms unchanged heartbeat, and immediate neutral snapshots.
+- [x] Implement raw multitouch controls with pointer IDs, including pointer cancellation.
+- [x] Use canonical Xbox labels and canonical Y-positive-up values.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: from `mobile/`, `dart pub get` -> PASS, Flutter application dependencies resolved.
+- Automated: from `mobile/`, `dart test test/input_send_scheduler_test.dart` -> PASS, 2/2 tests.
+- Automated: from `mobile/`, `dart test test/protocol_test.dart` -> PASS, 3/3 tests.
+- Automated: from `mobile/`, `dart analyze` -> PASS, no issues.
+- Automated: from `mobile/`, `dart test` -> PASS, 5/5 tests.
+- Automated: from `mobile/`, `flutter build apk --debug --no-pub` -> PASS, produced `build/app/outputs/flutter-apk/app-debug.apk`.
+- Artifacts: `mobile/android/`, `mobile/ios/`, `mobile/lib/client_preferences.dart`, `mobile/lib/controller_connection.dart`, `mobile/lib/gamepad_input_model.dart`, `mobile/lib/gamepad_state.dart`, `mobile/lib/input_send_scheduler.dart`, `mobile/lib/main.dart`, `mobile/test/input_send_scheduler_test.dart`, `mobile/pubspec.yaml`, `mobile/pubspec.lock`, `AGENTS.md`, `docs/acceptance.md`.
+- Exceptions: P1-06 physical Android, ViGEm driver, Windows controller, Wi-Fi-loss, and game checks remain pending human verification.
 
 ### P1-06 Verify end to end
 
-- [ ] Execute all P1 automated tests.
-- [ ] Confirm every button, both sticks, D-pad diagonals, and analog triggers in Windows and a real game.
-- [ ] Confirm stick + button + trigger simultaneous input.
-- [ ] Confirm wrong PIN creates no target.
-- [ ] Confirm blocked UDP is reported within two seconds.
-- [ ] Confirm app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralize within 300 ms.
-- [ ] Run for 30 minutes without stuck input.
+- [x] Execute all P1 automated tests.
+- [x] Confirm every button, both sticks, D-pad diagonals, and analog triggers in Windows and a real game.
+- [ ] Confirm stick + button + trigger simultaneous input. (pending human verification)
+- [x] Confirm wrong PIN creates no target. The mobile UI becomes unusable after the rejection and does not allow entering the correct PIN without recovery.
+- [ ] Confirm blocked UDP is reported within two seconds. UDP blocking and recovery were observed; exact timing remains pending human measurement.
+- [ ] Confirm app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralize within 300 ms. Safe neutralization was observed; exact timing remains pending human measurement.
+- [x] Run for 30 minutes without stuck input.
 
 Gate `G1`: PASS only with one real Android phone, one real X360 target, and timeout-neutralization evidence.
 
-Evidence: pending.
+Evidence (2026-08-22):
+- Automated: `dotnet restore windows/Pulgapp.sln --force-evaluate` -> PASS, all 10 projects restored with lockfiles evaluated.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors, duration 3.48 seconds.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~UdpInputDecoderTests"` -> PASS, 13/13 tests, duration 70 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 13/13 tests, duration 115 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~SessionCoordinatorTests"` -> PASS, 8/8 tests, duration 43 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 8/8 tests, duration 51 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~X360ReportMapperTests"` -> PASS, 7/7 tests, duration 39 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 7/7 tests, duration 42 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` -> PASS, 3/3 tests, duration 1 second.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 3/3 tests, duration 1 second.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
+- Automated: from `mobile/`, `dart pub get` -> PASS, dependencies resolved.
+- Automated: from `mobile/`, `dart test test/input_send_scheduler_test.dart` -> PASS, 2/2 tests.
+- Automated: from `mobile/`, `dart test test/protocol_test.dart` -> PASS, 3/3 tests.
+- Automated: from `mobile/`, `dart analyze` -> PASS, no issues.
+- Automated: from `mobile/`, `dart test` -> PASS, 5/5 tests.
+- Automated: from `mobile/`, `flutter build apk --debug --no-pub` -> PASS, produced `build/app/outputs/flutter-apk/app-debug.apk`.
+- Manual, user reported: physical Android phone, X360 target, and real-game play all worked; all buttons, sticks, D-pad diagonals, and analog triggers responded quickly and correctly.
+- Manual, user reported: invalid PIN was rejected and created no target, but the mobile app became unusable afterward and did not allow entering the correct PIN without recovery.
+- Manual, user reported: temporarily blocking UDP with a firewall rule prevented input/UDP operation, and removing the rule restored operation; the required two-second reporting threshold was not measured.
+- Manual, user reported: app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralized input correctly with no observed safety issue; the required 300 ms threshold was not measured.
+- Manual, user reported: 30-minute real-game test completed without noticeable delay or stuck input.
+- Artifacts: none; device, OS, and game model/version were not provided.
+- Exceptions: Explicit stick + button + trigger simultaneous-input observation and exact UDP/neutralization timing remain pending. Gate G1 is not fully closed because invalid-PIN recovery requires a code fix and the remaining measurements/evidence are missing.
 
 ## Phase P2: Four Independent X360 Clients
 

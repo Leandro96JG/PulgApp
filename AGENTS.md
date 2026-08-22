@@ -2,7 +2,7 @@
 
 ## Current State
 
-- The Windows solution is bootstrapped under `windows/` with ten projects and one NuGet lockfile per project. Application logic and mobile code are not implemented yet.
+- The Windows solution is bootstrapped under `windows/` with ten projects and one NuGet lockfile per project. P1 protocol codecs are implemented; the Flutter application is not yet bootstrapped.
 - Do not guess build or verification commands. Derive commands from manifests/scripts and keep the exact focused and full verification commands below current.
 - Treat this file as the bootstrap contract only. Once created, `protocol/protocol-v1.md` and its binary fixtures are the canonical protocol source.
 
@@ -13,9 +13,25 @@ Run these commands from the repository root:
 ```powershell
 dotnet restore windows/Pulgapp.sln --force-evaluate
 dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64
-dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~UnitTest1.Test1"
-dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build
+dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~UdpInputDecoderTests"
+dotnet test windows/tests/Pulgapp.Server.Protocol.Tests/Pulgapp.Server.Protocol.Tests.csproj --configuration Release --no-build -p:Platform=x64
+dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~SessionCoordinatorTests"
+dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64
+dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~X360ReportMapperTests"
+dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64
+dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"
+dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64
 dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64
+```
+
+Run these Dart/Flutter client commands from `mobile/`:
+
+```powershell
+dart pub get
+dart test test/protocol_test.dart
+dart analyze
+dart test
+flutter build apk --debug --no-pub
 ```
 
 `dotnet run --project windows/tools/Pulgapp.DriverDiagnostics/Pulgapp.DriverDiagnostics.csproj --configuration Release -p:Platform=x64` is hardware-only and must not run in normal driver-free CI. Do not add `--no-build` for manual diagnostics because it can reuse an outdated target executable.

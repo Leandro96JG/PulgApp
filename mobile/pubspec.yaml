@@ -1,0 +1,16 @@
+name: pulgapp_mobile
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  test: ^1.25.15
+
+flutter:
+  uses-material-design: true

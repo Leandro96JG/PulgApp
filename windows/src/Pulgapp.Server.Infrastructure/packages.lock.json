@@ -9,7 +9,10 @@
         "contentHash": "VJMO6hkalOZ7YdXTwcR881aTgPZlN7thEs3x6CWE/kEu7SdE5bY7QuDXkR2eqXfPAee4NrxInIAqa45PorpTsA=="
       },
       "pulgapp.server.core": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Pulgapp.Server.Protocol": "[1.0.0, )"
+        }
       },
       "pulgapp.server.protocol": {
         "type": "Project"

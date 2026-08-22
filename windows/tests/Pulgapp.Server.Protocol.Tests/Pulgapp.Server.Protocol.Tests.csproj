@@ -22,4 +22,8 @@
     <ProjectReference Include="..\..\src\Pulgapp.Server.Protocol\Pulgapp.Server.Protocol.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\..\protocol\fixtures\input-state-v1.bin" Link="input-state-v1.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
