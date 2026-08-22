@@ -105,7 +105,7 @@ The process writes `All targets remain neutral.`, a 60-second join-pulse schedul
 | One X360 | Pass | 1 | User reported 2026-08-22: recognized as Xbox controller and works in games. |
 | One DS4 | Pass | 1 | User reported 2026-08-22: recognized as Wireless Controller and works in games. |
 | Four X360 + four DS4 in Windows | Pass | 8 | User reported 2026-08-22: all eight devices recognized simultaneously. |
-| Pummel D1 | Partial | 8 | User reported 2026-08-22: all eight players joined; independent in-match movement remains pending. |
+| Pummel D1 | Pass | 8 | User reported 2026-08-22: all eight players joined and responded independently in a match. |
 | Pummel D2 | Pending | 0 | |
 | Pummel D3 | Pending | 0 | |
 | It Takes Two | Pending | 0 | |

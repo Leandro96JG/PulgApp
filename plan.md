@@ -156,7 +156,7 @@ Evidence (2026-08-05):
 - [x] Verify four X360 and four DS4 in Windows.
 - [x] Test Pummel Party with Steam Input disabled.
 - [ ] If needed, test the documented Steam Input variants without running DS4Windows or XOutput.
-- [ ] Record whether all eight devices can join independently inside Pummel Party.
+- [x] Record whether all eight devices can join independently inside Pummel Party.
 - [ ] Record It Takes Two behavior with two X360 targets.
 
 Gate `G0`: PASS only if Pummel Party accepts eight independent inputs. If it fails, stop product implementation and document the exact failure. Do not invent a fallback target type.
@@ -166,7 +166,9 @@ Evidence (2026-08-22):
 - Manual, user reported: one DS4 virtual target is recognized as a Wireless Controller in Windows and works correctly in games.
 - Manual, user reported: four X360 plus four DS4 virtual targets are recognized simultaneously in Windows.
 - Manual, user reported: with Steam Input disabled, Pummel Party accepted joins from all eight virtual targets.
-- Remaining: independent in-match input check, Steam Input variants if needed, and It Takes Two two-X360 test.
+- Manual, user reported: Pummel Party accepts eight independent inputs during a real match.
+- Gate G0: PASS. Steam Input variants are not needed because the disabled configuration works.
+- Remaining: It Takes Two two-X360 test.
 
 ## Phase P1: One Android Phone To One X360
 
