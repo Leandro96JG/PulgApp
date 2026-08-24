@@ -28,11 +28,22 @@ public sealed record PulgappServerStatus(
     string Pin,
     int TcpPort,
     int UdpPort,
-    string? ClientName,
+    IReadOnlyList<PulgappSlotStatus> Slots);
+
+public sealed record PulgappSlotStatus(
+    int Slot,
+    string ControllerType,
+    LobbySlotState State,
+    string ClientName,
+    string SourceIpAddress,
     string ConnectionState,
     TimeSpan? LastInputAge,
     double PacketRate,
-    string Rtt);
+    string Rtt,
+    string XInputUserIndex)
+{
+    public bool CanKick => State != LobbySlotState.Free;
+}
 
 public sealed class PulgappServer : IAsyncDisposable
 {
@@ -48,14 +59,8 @@ public sealed class PulgappServer : IAsyncDisposable
     private CancellationTokenSource? _stopping;
     private Task? _udpTask;
     private Task? _watchdogTask;
-    private WebSocket? _controlSocket;
-    private IPAddress? _controlAddress;
-    private bool _inputReadySent;
     private bool _acceptingConnections;
-    private string? _clientName;
-    private DateTimeOffset? _lastInputAt;
-    private DateTimeOffset? _packetRateStartedAt;
-    private long _acceptedPacketCount;
+    private readonly Dictionary<ulong, ControlConnection> _connections = [];
 
     public PulgappServer(PulgappServerOptions options, SessionCoordinator coordinator)
     {
@@ -106,27 +111,15 @@ public sealed class PulgappServer : IAsyncDisposable
         try
         {
             var now = DateTimeOffset.UtcNow;
-            var elapsed = _packetRateStartedAt is { } started ? now - started : TimeSpan.Zero;
-            var packetRate = elapsed.TotalSeconds > 0 ? _acceptedPacketCount / elapsed.TotalSeconds : 0;
-            var connectionState = _application is null
-                ? "Stopped"
-                : !_coordinator.IsActive
-                    ? "Waiting for client"
-                    : _coordinator.IsInputTimedOut
-                        ? "Input timed out"
-                        : _lastInputAt is null
-                            ? "Control connected"
-                            : "Input ready";
             return new PulgappServerStatus(
                 _application is not null,
                 _pin,
                 TcpPort,
                 UdpPort,
-                _clientName,
-                connectionState,
-                _lastInputAt is { } inputAt ? now - inputAt : null,
-                packetRate,
-                "Unavailable");
+                _coordinator.GetSlotStatuses()
+                    .OrderBy(slot => slot.Slot)
+                    .Select(slot => CreateSlotStatus(slot, now))
+                    .ToArray());
         }
         finally
         {
@@ -148,26 +141,31 @@ public sealed class PulgappServer : IAsyncDisposable
         }
     }
 
-    public async Task KickAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> KickAsync(int slot, CancellationToken cancellationToken = default)
     {
         await _stateLock.WaitAsync(cancellationToken);
         try
         {
-            _coordinator.Leave();
-            _clientName = null;
-            _lastInputAt = null;
-            _packetRateStartedAt = null;
-            _acceptedPacketCount = 0;
-            if (_controlSocket is { State: WebSocketState.Open } socket)
+            var connection = _connections.Values.SingleOrDefault(connection => connection.Slot == slot);
+            if (connection is null)
             {
-                try
-                {
-                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Kicked by server.", cancellationToken);
-                }
-                catch (WebSocketException) { }
-                catch (ObjectDisposedException) { }
-                catch (OperationCanceledException) { }
+                return _coordinator.ReleaseSlot(slot);
             }
+
+            _coordinator.Release(connection.SessionId);
+            _connections.Remove(connection.SessionId);
+            try
+            {
+                if (connection.Socket.State == WebSocketState.Open)
+                {
+                    await connection.Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Kicked by server.", cancellationToken);
+                }
+            }
+            catch (WebSocketException) { }
+            catch (ObjectDisposedException) { }
+            catch (OperationCanceledException) { }
+
+            return true;
         }
         finally
         {
@@ -188,20 +186,20 @@ public sealed class PulgappServer : IAsyncDisposable
         try
         {
             _coordinator.Shutdown();
-            _clientName = null;
-            _lastInputAt = null;
-            _packetRateStartedAt = null;
-            _acceptedPacketCount = 0;
-            if (_controlSocket is { State: WebSocketState.Open } socket)
+            foreach (var connection in _connections.Values.ToArray())
             {
                 try
                 {
-                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server shutting down.", cancellationToken);
+                    if (connection.Socket.State == WebSocketState.Open)
+                    {
+                        await connection.Socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server shutting down.", cancellationToken);
+                    }
                 }
                 catch (WebSocketException) { }
                 catch (ObjectDisposedException) { }
                 catch (OperationCanceledException) { }
             }
+            _connections.Clear();
         }
         finally
         {
@@ -243,18 +241,13 @@ public sealed class PulgappServer : IAsyncDisposable
         }
 
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
+        ControlConnection? connection = null;
         await _stateLock.WaitAsync(context.RequestAborted);
         try
         {
             if (!_acceptingConnections)
             {
                 await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "server_shutting_down", "The server is shutting down.", true), (WebSocketCloseStatus)1013, context.RequestAborted);
-                return;
-            }
-
-            if (_controlSocket is not null || _coordinator.IsActive)
-            {
-                await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "client_already_connected", "A client is already connected.", true), WebSocketCloseStatus.PolicyViolation, context.RequestAborted);
                 return;
             }
 
@@ -265,33 +258,46 @@ public sealed class PulgappServer : IAsyncDisposable
                 return;
             }
 
-            if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(parsedHello.Pin!), Encoding.ASCII.GetBytes(_pin)))
+            LobbyStartResult start;
+            if (parsedHello.ResumeToken is not null)
             {
-                await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "invalid_pin", "The PIN is invalid.", true), WebSocketCloseStatus.PolicyViolation, context.RequestAborted);
+                try
+                {
+                    start = _coordinator.Resume(parsedHello.ClientId, WebEncoders.Base64UrlDecode(parsedHello.ResumeToken));
+                }
+                catch (FormatException)
+                {
+                    start = new LobbyStartResult(LobbyStartStatus.ResumeRejected);
+                }
+            }
+            else
+            {
+                if (!CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(parsedHello.Pin!), Encoding.ASCII.GetBytes(_pin)))
+                {
+                    await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "invalid_pin", "The PIN is invalid.", true), WebSocketCloseStatus.PolicyViolation, context.RequestAborted);
+                    return;
+                }
+
+                start = _coordinator.StartNew(parsedHello.ClientId);
+            }
+
+            if (!start.Succeeded)
+            {
+                var (code, message, closeStatus) = start.Status switch
+                {
+                    LobbyStartStatus.ServerFull => ("server_full", "All X360 slots are occupied.", (WebSocketCloseStatus)1013),
+                    LobbyStartStatus.ClientAlreadyConnected => ("client_already_connected", "This client is already connected or reserved.", WebSocketCloseStatus.PolicyViolation),
+                    LobbyStartStatus.ResumeRejected => ("resume_rejected", "The resume token is invalid or expired.", WebSocketCloseStatus.PolicyViolation),
+                    _ => ("controller_create_failed", "The virtual controller could not be created.", WebSocketCloseStatus.InternalServerError),
+                };
+                await SendAndCloseAsync(socket, new ErrorMessage(1, "error", code, message, true), closeStatus, context.RequestAborted);
                 return;
             }
 
-            var token = RandomNumberGenerator.GetBytes(16);
-            ulong sessionId;
-            do { sessionId = BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)); } while (sessionId == 0);
-            try
-            {
-                _coordinator.Start(sessionId, token);
-            }
-            catch (Exception)
-            {
-                await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "controller_create_failed", "The virtual controller could not be created.", true), WebSocketCloseStatus.InternalServerError, context.RequestAborted);
-                return;
-            }
-
-            _controlSocket = socket;
-            _controlAddress = remoteAddress.MapToIPv4();
-            _inputReadySent = false;
-            _clientName = parsedHello.ClientName;
-            _lastInputAt = null;
-            _packetRateStartedAt = DateTimeOffset.UtcNow;
-            _acceptedPacketCount = 0;
-            await SendJsonAsync(socket, new WelcomeMessage(1, "welcome", _serverId, _options.ServerName, sessionId.ToString("x16"), WebEncoders.Base64UrlEncode(token), UdpPort, 1, "x360", false, WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32)), 250, 15000), context.RequestAborted);
+            var credentials = start.Credentials!;
+            connection = new ControlConnection(socket, remoteAddress.MapToIPv4(), credentials.SessionId, start.Slot!.Value, parsedHello.ClientName, DateTimeOffset.UtcNow);
+            _connections.Add(credentials.SessionId, connection);
+            await SendJsonAsync(socket, new WelcomeMessage(1, "welcome", _serverId, _options.ServerName, credentials.SessionId.ToString("x16"), WebEncoders.Base64UrlEncode(credentials.UdpToken), UdpPort, connection.Slot, "x360", parsedHello.ResumeToken is not null, WebEncoders.Base64UrlEncode(credentials.ResumeToken), 250, 15000), context.RequestAborted);
         }
         finally
         {
@@ -300,23 +306,22 @@ public sealed class PulgappServer : IAsyncDisposable
 
         try
         {
-            await ProcessControlMessagesAsync(socket, context.RequestAborted);
+            var release = await ProcessControlMessagesAsync(socket, context.RequestAborted);
+            if (release)
+            {
+                await _stateLock.WaitAsync();
+                try { _coordinator.Release(connection.SessionId); }
+                finally { _stateLock.Release(); }
+            }
         }
         finally
         {
             await _stateLock.WaitAsync();
             try
             {
-                if (ReferenceEquals(_controlSocket, socket))
+                if (connection is not null && _connections.Remove(connection.SessionId))
                 {
-                    _controlSocket = null;
-                    _controlAddress = null;
-                    _clientName = null;
-                    _lastInputAt = null;
-                    _packetRateStartedAt = null;
-                    _acceptedPacketCount = 0;
-                    _coordinator.HandleControlLoss();
-                    _coordinator.Leave();
+                    _coordinator.HandleControlLoss(connection.SessionId);
                 }
             }
             finally
@@ -326,17 +331,17 @@ public sealed class PulgappServer : IAsyncDisposable
         }
     }
 
-    private async Task ProcessControlMessagesAsync(WebSocket socket, CancellationToken cancellationToken)
+    private async Task<bool> ProcessControlMessagesAsync(WebSocket socket, CancellationToken cancellationToken)
     {
         while (socket.State == WebSocketState.Open)
         {
             JsonDocument document;
             try { document = await ReceiveJsonAsync(socket, cancellationToken); }
-            catch (WebSocketException) { return; }
+            catch (WebSocketException) { return false; }
             catch (InvalidDataException)
             {
                 await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "malformed_message", "The control message is malformed.", true), WebSocketCloseStatus.ProtocolError, cancellationToken);
-                return;
+                return false;
             }
 
             using (document)
@@ -345,7 +350,7 @@ public sealed class PulgappServer : IAsyncDisposable
                 if (!HasVersionAndType(root, out var type))
                 {
                     await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "protocol_mismatch", "Unsupported protocol version.", true), WebSocketCloseStatus.ProtocolError, cancellationToken);
-                    return;
+                    return false;
                 }
 
                 if (type == "ping" && root.TryGetProperty("id", out var id) && id.TryGetUInt32(out var pingId) &&
@@ -356,16 +361,18 @@ public sealed class PulgappServer : IAsyncDisposable
                 }
                 else if (type is "leave" or "suspend")
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, type, cancellationToken);
-                    return;
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, type, cancellationToken);
+                    return type == "leave";
                 }
                 else
                 {
                     await SendAndCloseAsync(socket, new ErrorMessage(1, "error", "malformed_message", "The control message is malformed.", true), WebSocketCloseStatus.ProtocolError, cancellationToken);
-                    return;
+                    return false;
                 }
             }
         }
+
+        return false;
     }
 
     private async Task ReceiveUdpAsync(CancellationToken cancellationToken)
@@ -378,30 +385,31 @@ public sealed class PulgappServer : IAsyncDisposable
                 await _stateLock.WaitAsync(cancellationToken);
                 try
                 {
-                    if (_controlAddress is null || !received.RemoteEndPoint.Address.Equals(_controlAddress) ||
-                        !UdpInputDecoder.TryDecode(received.Buffer, out var snapshot) || snapshot is null)
+                    if (!UdpInputDecoder.TryDecode(received.Buffer, out var snapshot) || snapshot is null ||
+                        !_connections.TryGetValue(snapshot.SessionId, out var connection) ||
+                        !received.RemoteEndPoint.Address.Equals(connection.Address))
                     {
                         continue;
                     }
 
-                    var restored = _coordinator.IsInputTimedOut;
+                    var restored = _coordinator.TryGetSlotStatus(snapshot.SessionId, out var status) && status!.State == LobbySlotState.InputTimedOut;
                     if (!_coordinator.TryAccept(snapshot))
                     {
                         continue;
                     }
 
-                    _lastInputAt = DateTimeOffset.UtcNow;
-                    _acceptedPacketCount++;
+                    connection.LastInputAt = DateTimeOffset.UtcNow;
+                    connection.AcceptedPacketCount++;
 
-                    if (!_inputReadySent)
+                    if (!connection.InputReadySent)
                     {
-                        _inputReadySent = true;
-                        await SendJsonAsync(_controlSocket, new InputReadyMessage(1, "input_ready", snapshot.Sequence), cancellationToken);
-                        await SendJsonAsync(_controlSocket, new InputStatusMessage(1, "input_status", "ready", snapshot.Sequence), cancellationToken);
+                        connection.InputReadySent = true;
+                        await SendJsonAsync(connection.Socket, new InputReadyMessage(1, "input_ready", snapshot.Sequence), cancellationToken);
+                        await SendJsonAsync(connection.Socket, new InputStatusMessage(1, "input_status", "ready", snapshot.Sequence), cancellationToken);
                     }
                     else if (restored)
                     {
-                        await SendJsonAsync(_controlSocket, new InputStatusMessage(1, "input_status", "restored", snapshot.Sequence), cancellationToken);
+                        await SendJsonAsync(connection.Socket, new InputStatusMessage(1, "input_status", "restored", snapshot.Sequence), cancellationToken);
                     }
                 }
                 finally
@@ -424,10 +432,19 @@ public sealed class PulgappServer : IAsyncDisposable
                 await _stateLock.WaitAsync(cancellationToken);
                 try
                 {
+                    var activeSessions = _connections.Keys.ToArray();
                     if (_coordinator.CheckInputTimeout())
                     {
-                        await SendJsonAsync(_controlSocket, new InputStatusMessage(1, "input_status", "timed_out", _coordinator.LastSequence), cancellationToken);
+                        foreach (var sessionId in activeSessions)
+                        {
+                            if (_connections.TryGetValue(sessionId, out var connection) &&
+                                _coordinator.TryGetSlotStatus(sessionId, out var status) && status!.State == LobbySlotState.InputTimedOut)
+                            {
+                                await SendJsonAsync(connection.Socket, new InputStatusMessage(1, "input_status", "timed_out", status.LastSequence), cancellationToken);
+                            }
+                        }
                     }
+                    _coordinator.ExpireLeases();
                 }
                 finally { _stateLock.Release(); }
             }
@@ -477,7 +494,7 @@ public sealed class PulgappServer : IAsyncDisposable
         finally { ArrayPool<byte>.Shared.Return(buffer); }
     }
 
-    private static bool TryParseHello(JsonDocument document, out (string Pin, string ClientId, string ClientName) hello, out ErrorMessage? error)
+    private static bool TryParseHello(JsonDocument document, out (string? Pin, string ClientId, string ClientName, string? ResumeToken) hello, out ErrorMessage? error)
     {
         hello = default;
         error = null;
@@ -487,23 +504,37 @@ public sealed class PulgappServer : IAsyncDisposable
             !root.TryGetProperty("clientName", out var clientName) || clientName.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(clientName.GetString()) || clientName.GetString()!.EnumerateRunes().Count() > 64 ||
             !root.TryGetProperty("appVersion", out var appVersion) || appVersion.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(appVersion.GetString()) || appVersion.GetString()!.Length > 32 ||
             !root.TryGetProperty("capabilities", out var capabilities) || capabilities.ValueKind != JsonValueKind.Array ||
-            !capabilities.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String && value.GetString() == "udp_input_v1") ||
-            !root.TryGetProperty("pin", out var pin) || pin.ValueKind != JsonValueKind.String ||
-            root.TryGetProperty("resumeToken", out _))
+            !capabilities.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String && value.GetString() == "udp_input_v1"))
         {
             error = new ErrorMessage(1, "error", "malformed_message", "The hello message is malformed.", true);
             return false;
         }
 
-        var pinValue = pin.GetString()!;
-        if (pinValue.Length != 6 || pinValue.Any(character => character is < '0' or > '9'))
+        var hasPin = root.TryGetProperty("pin", out var pin);
+        var hasResumeToken = root.TryGetProperty("resumeToken", out var resumeToken);
+        if (hasPin == hasResumeToken ||
+            hasPin && (pin.ValueKind != JsonValueKind.String || pin.GetString()!.Length != 6 || pin.GetString()!.Any(character => character is < '0' or > '9')) ||
+            hasResumeToken && resumeToken.ValueKind != JsonValueKind.String)
         {
             error = new ErrorMessage(1, "error", "malformed_message", "The hello message is malformed.", true);
             return false;
         }
 
-        hello = (pinValue, clientId.GetString()!, clientName.GetString()!);
+        hello = (hasPin ? pin.GetString() : null, clientId.GetString()!, clientName.GetString()!, hasResumeToken ? resumeToken.GetString() : null);
         return true;
+    }
+
+    private sealed class ControlConnection(WebSocket socket, IPAddress address, ulong sessionId, int slot, string clientName, DateTimeOffset packetRateStartedAt)
+    {
+        public WebSocket Socket { get; } = socket;
+        public IPAddress Address { get; } = address;
+        public ulong SessionId { get; } = sessionId;
+        public int Slot { get; } = slot;
+        public string ClientName { get; } = clientName;
+        public DateTimeOffset PacketRateStartedAt { get; } = packetRateStartedAt;
+        public bool InputReadySent { get; set; }
+        public DateTimeOffset? LastInputAt { get; set; }
+        public long AcceptedPacketCount { get; set; }
     }
 
     private static bool HasVersionAndType(JsonElement root, out string? type)
@@ -514,6 +545,34 @@ public sealed class PulgappServer : IAsyncDisposable
     }
 
     private static string MonotonicMicroseconds() => ((Stopwatch.GetTimestamp() * 1_000_000L) / Stopwatch.Frequency).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private PulgappSlotStatus CreateSlotStatus(LobbySlotStatus slot, DateTimeOffset now)
+    {
+        var connection = _connections.Values.SingleOrDefault(connection => connection.Slot == slot.Slot);
+        var elapsed = connection is null ? TimeSpan.Zero : now - connection.PacketRateStartedAt;
+        var packetRate = elapsed.TotalSeconds > 0 ? connection!.AcceptedPacketCount / elapsed.TotalSeconds : 0;
+        var connectionState = _application is null
+            ? "Stopped"
+            : slot.State switch
+            {
+                LobbySlotState.Free => "Available",
+                LobbySlotState.Reserved => "Reserved (lease)",
+                LobbySlotState.InputTimedOut => "Input timed out",
+                _ when connection?.LastInputAt is null => "Control connected",
+                _ => "Input ready",
+            };
+        return new PulgappSlotStatus(
+            slot.Slot,
+            "Xbox 360",
+            slot.State,
+            connection?.ClientName ?? (slot.State == LobbySlotState.Reserved ? "Reserved client" : "No client connected"),
+            connection?.Address.ToString() ?? "-",
+            connectionState,
+            connection?.LastInputAt is { } inputAt ? now - inputAt : null,
+            packetRate,
+            "Unavailable",
+            "Not reported");
+    }
 
     private static async Task AwaitBackgroundTaskAsync(Task? task)
     {

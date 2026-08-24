@@ -81,7 +81,7 @@ public sealed class PulgappServerTests
     }
 
     [Fact]
-    public async Task DashboardStatusTracksClientInputAndAdministrativeActions()
+    public async Task DashboardStatusTracksFourSlotsAndSelectiveAdministrativeActions()
     {
         var factory = new FakeControllerFactory();
         await using var server = new PulgappServer(
@@ -92,29 +92,129 @@ public sealed class PulgappServerTests
         var initial = await server.GetStatusAsync();
         Assert.True(initial.IsRunning);
         Assert.Equal("482913", initial.Pin);
-        Assert.Equal("Waiting for client", initial.ConnectionState);
+        Assert.Equal([1, 2, 3, 4], initial.Slots.Select(slot => slot.Slot));
+        Assert.All(initial.Slots, slot =>
+        {
+            Assert.Equal(LobbySlotState.Free, slot.State);
+            Assert.Equal("Available", slot.ConnectionState);
+            Assert.Equal("No client connected", slot.ClientName);
+            Assert.Equal("-", slot.SourceIpAddress);
+            Assert.Equal("Not reported", slot.XInputUserIndex);
+            Assert.False(slot.CanKick);
+        });
 
-        using var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{GetTcpPort(server)}/control"), CancellationToken.None);
-        await SendJsonAsync(socket, new { v = 1, type = "hello", clientId = Guid.NewGuid(), clientName = "Dashboard Phone", appVersion = "1", pin = "482913", capabilities = new[] { "udp_input_v1" } });
-        using var welcome = await ReceiveJsonAsync(socket);
-        var sessionId = Convert.ToUInt64(welcome.RootElement.GetProperty("sessionId").GetString(), 16);
-        var token = WebEncoders.Base64UrlDecode(welcome.RootElement.GetProperty("udpToken").GetString()!);
+        var sockets = new List<ClientWebSocket>();
+        var welcomes = new List<JsonDocument>();
         using var udp = new UdpClient();
-        await udp.SendAsync(CreateDatagram(sessionId, token, 1), new IPEndPoint(IPAddress.Loopback, server.UdpPort));
-        using var inputReady = await ReceiveJsonAsync(socket);
+        try
+        {
+            for (var slot = 1; slot <= 4; slot++)
+            {
+                var socket = new ClientWebSocket();
+                await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{GetTcpPort(server)}/control"), CancellationToken.None);
+                await SendJsonAsync(socket, new { v = 1, type = "hello", clientId = Guid.NewGuid(), clientName = $"Dashboard Phone {slot}", appVersion = "1", pin = "482913", capabilities = new[] { "udp_input_v1" } });
+                var welcome = await ReceiveJsonAsync(socket);
+                var sessionId = Convert.ToUInt64(welcome.RootElement.GetProperty("sessionId").GetString(), 16);
+                var token = WebEncoders.Base64UrlDecode(welcome.RootElement.GetProperty("udpToken").GetString()!);
+                await udp.SendAsync(CreateDatagram(sessionId, token, (uint)slot), new IPEndPoint(IPAddress.Loopback, server.UdpPort));
+                using var inputReady = await ReceiveJsonAsync(socket);
+                using var inputStatus = await ReceiveJsonAsync(socket);
+                sockets.Add(socket);
+                welcomes.Add(welcome);
+            }
 
-        var connected = await server.GetStatusAsync();
-        Assert.Equal("Dashboard Phone", connected.ClientName);
-        Assert.Equal("Input ready", connected.ConnectionState);
-        Assert.NotNull(connected.LastInputAge);
-        Assert.True(connected.PacketRate >= 0);
+            var connected = await server.GetStatusAsync();
+            Assert.Equal([1, 2, 3, 4], connected.Slots.Select(slot => slot.Slot));
+            Assert.All(connected.Slots, slot =>
+            {
+                Assert.Equal("Xbox 360", slot.ControllerType);
+                Assert.Equal("Input ready", slot.ConnectionState);
+                Assert.StartsWith("Dashboard Phone ", slot.ClientName);
+                Assert.Equal("127.0.0.1", slot.SourceIpAddress);
+                Assert.NotNull(slot.LastInputAge);
+                Assert.True(slot.PacketRate >= 0);
+                Assert.True(slot.CanKick);
+            });
 
-        var regeneratedPin = await server.RegeneratePinAsync();
-        Assert.Matches("^[0-9]{6}$", regeneratedPin);
-        await server.KickAsync();
-        Assert.Equal("Waiting for client", (await server.GetStatusAsync()).ConnectionState);
+            Assert.True(await server.KickAsync(2));
+            Assert.False(await server.KickAsync(2));
+            var afterKick = await server.GetStatusAsync();
+            Assert.Equal(LobbySlotState.Free, afterKick.Slots[1].State);
+            Assert.Equal("Available", afterKick.Slots[1].ConnectionState);
+            Assert.All(afterKick.Slots.Where(slot => slot.Slot != 2), slot => Assert.Equal(LobbySlotState.Active, slot.State));
+
+            sockets[0].Dispose();
+            var reserved = await WaitForSlotStateAsync(server, 1, LobbySlotState.Reserved);
+            Assert.Equal("Reserved (lease)", reserved.ConnectionState);
+            Assert.Equal("Reserved client", reserved.ClientName);
+            Assert.Equal("-", reserved.SourceIpAddress);
+            Assert.Null(reserved.LastInputAge);
+            Assert.Equal(0, reserved.PacketRate);
+            Assert.True(reserved.CanKick);
+            Assert.True(await server.KickAsync(1));
+
+            var regeneratedPin = await server.RegeneratePinAsync();
+            Assert.Matches("^[0-9]{6}$", regeneratedPin);
+        }
+        finally
+        {
+            foreach (var welcome in welcomes)
+            {
+                welcome.Dispose();
+            }
+
+            foreach (var socket in sockets)
+            {
+                socket.Dispose();
+            }
+        }
     }
+
+    [Fact]
+    public async Task Four_clients_get_independent_slots_and_fifth_is_full()
+    {
+        var factory = new FakeControllerFactory();
+        await using var server = new PulgappServer(new PulgappServerOptions(FindAvailablePort(), 0, "482913"), new SessionCoordinator(factory, TimeProvider.System));
+        await server.StartAsync();
+        var port = GetTcpPort(server);
+        var sockets = new List<ClientWebSocket>();
+        var welcomes = new List<JsonDocument>();
+        try
+        {
+            for (var slot = 1; slot <= 4; slot++)
+            {
+                var socket = new ClientWebSocket();
+                await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/control"), CancellationToken.None);
+                await SendJsonAsync(socket, Hello($"00000000-0000-0000-0000-00000000000{slot}"));
+                var welcome = await ReceiveJsonAsync(socket);
+                Assert.Equal(slot, welcome.RootElement.GetProperty("slot").GetInt32());
+                sockets.Add(socket);
+                welcomes.Add(welcome);
+            }
+
+            using var fifth = new ClientWebSocket();
+            await fifth.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/control"), CancellationToken.None);
+            await SendJsonAsync(fifth, Hello("00000000-0000-0000-0000-000000000005"));
+            using var full = await ReceiveJsonAsync(fifth);
+            Assert.Equal("server_full", full.RootElement.GetProperty("code").GetString());
+
+            Assert.Equal(4, factory.CreateCount);
+        }
+        finally
+        {
+            foreach (var welcome in welcomes)
+            {
+                welcome.Dispose();
+            }
+
+            foreach (var socket in sockets)
+            {
+                socket.Dispose();
+            }
+        }
+    }
+
+    private static object Hello(string clientId) => new { v = 1, type = "hello", clientId, clientName = "Test Phone", appVersion = "1", pin = "482913", capabilities = new[] { "udp_input_v1" } };
 
     private static int GetTcpPort(PulgappServer server)
     {
@@ -129,6 +229,24 @@ public sealed class PulgappServerTests
         return ((IPEndPoint)listener.LocalEndpoint).Port;
     }
 
+    private static async Task<PulgappSlotStatus> WaitForSlotStateAsync(PulgappServer server, int slotNumber, LobbySlotState expectedState)
+    {
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var slot = (await server.GetStatusAsync()).Slots.Single(slot => slot.Slot == slotNumber);
+            if (slot.State == expectedState)
+            {
+                return slot;
+            }
+
+            await Task.Delay(20);
+        }
+
+        var finalStatus = (await server.GetStatusAsync()).Slots.Single(slot => slot.Slot == slotNumber);
+        Assert.Equal(expectedState, finalStatus.State);
+        return finalStatus;
+    }
+
     private static async Task SendJsonAsync(ClientWebSocket socket, object value)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
@@ -138,7 +256,8 @@ public sealed class PulgappServerTests
     private static async Task<JsonDocument> ReceiveJsonAsync(ClientWebSocket socket)
     {
         var bytes = new byte[4096];
-        var result = await socket.ReceiveAsync(bytes, CancellationToken.None);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var result = await socket.ReceiveAsync(bytes, timeout.Token);
         return JsonDocument.Parse(bytes.AsMemory(0, result.Count));
     }
 
@@ -158,7 +277,9 @@ public sealed class PulgappServerTests
 
     private sealed class FakeControllerFactory : VirtualControllerFactory
     {
-        public FakeController Controller { get; } = new();
+        public List<FakeController> Controllers { get; } = [];
+
+        public FakeController Controller => Controllers[0];
 
         public int CreateCount { get; private set; }
 
@@ -166,7 +287,9 @@ public sealed class PulgappServerTests
         {
             Assert.Equal(ControllerKind.X360, kind);
             CreateCount++;
-            return Controller;
+            var controller = new FakeController();
+            Controllers.Add(controller);
+            return controller;
         }
     }
 

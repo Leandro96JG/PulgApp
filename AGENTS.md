@@ -21,6 +21,8 @@ dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Inf
 dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release --no-build -p:Platform=x64
 dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"
 dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64
+dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 5 --rate-hz 120 --duration-seconds 10 --loss-every 7 --duplicate-every 5 --reorder-every 9
+dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 4 --rate-hz 120 --duration-seconds 7200 --loss-every 7 --duplicate-every 5 --reorder-every 9
 dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64
 ```
 

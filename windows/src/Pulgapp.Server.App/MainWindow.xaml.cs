@@ -62,11 +62,11 @@ public partial class MainWindow : Window
         await RefreshDashboardAsync();
     }
 
-    private async void KickButton_Click(object sender, RoutedEventArgs e)
+    private async void KickSlotButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_server is not null)
+        if (_server is not null && sender is FrameworkElement { Tag: int slot })
         {
-            await _server.KickAsync();
+            await _server.KickAsync(slot);
         }
 
         await RefreshDashboardAsync();
@@ -77,18 +77,14 @@ public partial class MainWindow : Window
     private async Task RefreshDashboardAsync()
     {
         var status = _server is null ? null : await _server.GetStatusAsync();
-        ServerStatusText.Text = status?.ConnectionState ?? "Stopped";
+        ServerStatusText.Text = status is null ? "Stopped" : "Running";
         DriverStatusText.Text = _driverStatus;
         PortsText.Text = status is null ? "TCP 26760 / UDP 26761" : $"TCP {status.TcpPort} / UDP {status.UdpPort}";
         PinText.Text = status?.Pin ?? "Start the server to generate a PIN";
-        ClientNameText.Text = status?.ClientName ?? "No client connected";
-        ConnectionStateText.Text = status?.ConnectionState ?? "Stopped";
-        LastInputAgeText.Text = status?.LastInputAge is { } age ? $"{age.TotalMilliseconds:0} ms" : "-";
-        MetricsText.Text = status is null ? "0 packets/s / -" : $"{status.PacketRate:0.0} packets/s / {status.Rtt}";
+        SlotsItemsControl.ItemsSource = status?.Slots.Select(slot => new SlotDashboardRow(slot)).ToArray() ?? [];
         StartButton.IsEnabled = status is null;
         StopButton.IsEnabled = status is not null;
         RegeneratePinButton.IsEnabled = status is not null;
-        KickButton.IsEnabled = status?.ClientName is not null;
     }
 
     private async void Window_Closing(object? sender, CancelEventArgs e)
@@ -127,4 +123,16 @@ public partial class MainWindow : Window
             .Select(address => address.ToString())
             .Distinct(StringComparer.Ordinal)
             .DefaultIfEmpty("No active LAN IPv4 address found.");
+
+    private sealed record SlotDashboardRow(PulgappSlotStatus Status)
+    {
+        public int SlotNumber => Status.Slot;
+        public string SlotLabel => SlotNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        public string ControllerType => Status.ControllerType;
+        public string ClientAndAddress => $"{Status.ClientName} / {Status.SourceIpAddress}";
+        public string ConnectionState => Status.ConnectionState;
+        public string InputAndXInput => $"{(Status.LastInputAge is { } age ? $"{age.TotalMilliseconds:0} ms" : "-")} / {Status.XInputUserIndex}";
+        public string Metrics => $"{Status.PacketRate:0.0} packets/s / RTT {Status.Rtt}";
+        public bool CanKick => Status.CanKick;
+    }
 }

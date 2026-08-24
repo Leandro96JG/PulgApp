@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'client_preferences.dart';
 import 'gamepad_state.dart';
 import 'input_send_scheduler.dart';
 import 'protocol.dart';
@@ -17,17 +16,23 @@ enum PulgappConnectionState {
 }
 
 final class ControllerConnection {
-  ControllerConnection({required this.preferences, required this.clientName}) {
+  ControllerConnection({
+    required this.clientId,
+    required this.clientName,
+    required this.saveEndpoint,
+  }) {
     _scheduler = InputSendScheduler(_sendUdp);
   }
 
-  final ClientPreferences preferences;
+  final String clientId;
   final String clientName;
+  final Future<void> Function(String endpoint) saveEndpoint;
   late final InputSendScheduler _scheduler;
   final StreamController<PulgappConnectionState> _states =
       StreamController<PulgappConnectionState>.broadcast();
   final Stopwatch _clock = Stopwatch()..start();
   WebSocket? _webSocket;
+  StreamSubscription<dynamic>? _controlSubscription;
   RawDatagramSocket? _udpSocket;
   Timer? _pingTimer;
   Timer? _udpReadyTimer;
@@ -61,7 +66,7 @@ final class ControllerConnection {
       final webSocket = await WebSocket.connect('ws://$host:26760/control');
       _webSocket = webSocket;
       final welcome = Completer<WelcomeMessage>();
-      webSocket.listen(
+      _controlSubscription = webSocket.listen(
         (message) => _handleControlMessage(message, welcome),
         onDone: () => _onControlClosed(),
         onError: (_, __) => _onControlClosed(),
@@ -70,7 +75,7 @@ final class ControllerConnection {
       webSocket.add(
         jsonEncode(
           HelloMessage(
-            clientId: preferences.clientId,
+            clientId: clientId,
             clientName: clientName,
             appVersion: '0.1.0',
             capabilities: const ['udp_input_v1'],
@@ -91,7 +96,7 @@ final class ControllerConnection {
           _setState(PulgappConnectionState.inputUnavailable);
         }
       });
-      await preferences.saveEndpoint(host);
+      await saveEndpoint(host);
       _setState(PulgappConnectionState.connected);
     } catch (error) {
       _error = 'Connection failed: $error';
@@ -218,9 +223,13 @@ final class ControllerConnection {
     _scheduler.dispose();
     _udpSocket?.close();
     _udpSocket = null;
+    await _controlSubscription?.cancel();
+    _controlSubscription = null;
     final socket = _webSocket;
     _webSocket = null;
-    if (socket != null) await socket.close();
+    // A rejected pairing can close without completing the WebSocket handshake.
+    // Do not leave the pairing form disabled while waiting for that peer.
+    if (socket != null) unawaited(socket.close());
     _welcome = null;
     _serverAddress = null;
     _setState(PulgappConnectionState.disconnected);

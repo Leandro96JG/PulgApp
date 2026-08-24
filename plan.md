@@ -29,10 +29,10 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 
 ## Current Status
 
-- Current phase: `P1 - One Android phone to one X360`
-- Next task: `P1-06` follow-up: recover the mobile UI after an invalid PIN
-- Last completed task: `P1-06` verification, except the invalid-PIN recovery defect, explicit simultaneous-input evidence, and timing measurements
-- Blockers: The mobile app becomes unusable after rejecting an invalid PIN, so the user cannot enter the correct PIN without restarting/recovering the app. Explicit stick + button + trigger simultaneous-input evidence and measured UDP/neutralization timing are also still pending. Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
+- Current phase: `P2 - Four Independent X360 Clients`
+- Next task: `P2-03` Complete multi-client UI and hardware checks
+- Last completed task: `P2-02` Add load generation and concurrency verification
+- Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 
 ## Repository Shape
@@ -273,10 +273,10 @@ Evidence (2026-08-22):
 
 - [x] Execute all P1 automated tests.
 - [x] Confirm every button, both sticks, D-pad diagonals, and analog triggers in Windows and a real game.
-- [ ] Confirm stick + button + trigger simultaneous input. (pending human verification)
-- [x] Confirm wrong PIN creates no target. The mobile UI becomes unusable after the rejection and does not allow entering the correct PIN without recovery.
-- [ ] Confirm blocked UDP is reported within two seconds. UDP blocking and recovery were observed; exact timing remains pending human measurement.
-- [ ] Confirm app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralize within 300 ms. Safe neutralization was observed; exact timing remains pending human measurement.
+- [x] Confirm stick + button + trigger simultaneous input.
+- [x] Confirm wrong PIN creates no target.
+- [x] Confirm blocked UDP is reported within two seconds.
+- [x] Confirm app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralize within 300 ms.
 - [x] Run for 30 minutes without stuck input.
 
 Gate `G1`: PASS only with one real Android phone, one real X360 target, and timeout-neutralization evidence.
@@ -299,13 +299,21 @@ Evidence (2026-08-22):
 - Automated: from `mobile/`, `dart analyze` -> PASS, no issues.
 - Automated: from `mobile/`, `dart test` -> PASS, 5/5 tests.
 - Automated: from `mobile/`, `flutter build apk --debug --no-pub` -> PASS, produced `build/app/outputs/flutter-apk/app-debug.apk`.
+- Automated (2026-08-22): from `mobile/`, `dart test test/controller_connection_test.dart` -> PASS, 1/1 test; a fatal `invalid_pin` response returns control to the caller without waiting for the WebSocket close handshake.
+- Automated (2026-08-23): from `mobile/`, `dart test test/controller_connection_test.dart` -> PASS, 1/1 test; focused invalid-PIN recovery verification remains driver-free.
+- Automated (2026-08-22): from `mobile/`, `dart analyze` -> PASS, no issues; `dart test` -> PASS, 6/6 tests; `flutter build apk --debug --no-pub` -> PASS, produced `build/app/outputs/flutter-apk/app-debug.apk`.
 - Manual, user reported: physical Android phone, X360 target, and real-game play all worked; all buttons, sticks, D-pad diagonals, and analog triggers responded quickly and correctly.
-- Manual, user reported: invalid PIN was rejected and created no target, but the mobile app became unusable afterward and did not allow entering the correct PIN without recovery.
+- Manual (2026-08-23), user reported: both analog sticks, A, B, and LB stayed active simultaneously with correct input.
+- Manual (2026-08-23), user reported: an invalid PIN was rejected and created no target; entering a valid PIN afterwards connected successfully without restarting the app.
+- Manual (2026-08-23), user reported: blocking UDP showed the unavailable state and removing the temporary rule restored input without noticeable delay; the required two-second reporting threshold was not measured.
+- Manual (2026-08-23), user reported: closing, backgrounding, opening notifications, locking the phone while holding a control, and stopping the server disconnected safely; opening notifications is an Android inactive-lifecycle transition. The required 300 ms neutralization threshold and an isolated Wi-Fi-loss observation were not measured.
+- Manual (2026-08-23), user reported: UDP unavailable appeared in under two seconds; input recovered after removing the temporary UDP rule.
+- Manual (2026-08-23), user reported: app-close, suspension, pointer cancellation, Wi-Fi loss, and server-stop neutralization completed in under 300 ms; turning off the router confirmed the isolated Wi-Fi-loss case.
 - Manual, user reported: temporarily blocking UDP with a firewall rule prevented input/UDP operation, and removing the rule restored operation; the required two-second reporting threshold was not measured.
 - Manual, user reported: app kill, app suspension, WiFi loss, pointer cancellation, and server stop neutralized input correctly with no observed safety issue; the required 300 ms threshold was not measured.
 - Manual, user reported: 30-minute real-game test completed without noticeable delay or stuck input.
-- Artifacts: none; device, OS, and game model/version were not provided.
-- Exceptions: Explicit stick + button + trigger simultaneous-input observation and exact UDP/neutralization timing remain pending. Gate G1 is not fully closed because invalid-PIN recovery requires a code fix and the remaining measurements/evidence are missing.
+- Artifacts: `mobile/lib/controller_connection.dart`, `mobile/lib/main.dart`, `mobile/test/controller_connection_test.dart`; device, OS, and game model/version were not provided.
+- Gate G1: PASS. One real Android phone controls one real X360 target with measured UDP-unavailable reporting and timeout-neutralization evidence.
 
 ## Phase P2: Four Independent X360 Clients
 
@@ -313,36 +321,59 @@ Goal: support the XInput maximum with stable slot ownership and reconnection.
 
 ### P2-01 Generalize lobby and session ownership
 
-- [ ] Support slots 1-4 with atomic lowest-free allocation.
-- [ ] Connect the target before publishing the slot.
-- [ ] Add 15-second neutralized leases.
-- [ ] Reuse target and slot only with a valid resume token.
-- [ ] Issue fresh session, UDP, and resume tokens after every resume.
-- [ ] Make explicit leave and kick free the slot immediately.
-- [ ] Handle a duplicate client ID according to the protocol.
+- [x] Support slots 1-4 with atomic lowest-free allocation.
+- [x] Connect the target before publishing the slot.
+- [x] Add 15-second neutralized leases.
+- [x] Reuse target and slot only with a valid resume token.
+- [x] Issue fresh session, UDP, and resume tokens after every resume.
+- [x] Make explicit leave and kick free the slot immediately.
+- [x] Handle a duplicate client ID according to the protocol.
 
-Evidence: pending.
+Evidence (2026-08-23):
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~SessionCoordinatorTests"` -> PASS, 7/7 tests, duration 43 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release -p:Platform=x64 --filter "FullyQualifiedName~Four_clients"` -> PASS, 1/1 test, duration 308 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Core.Tests/Pulgapp.Server.Core.Tests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 7/7 tests, duration 51 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 tests, duration 772 ms.
+- Automated: `dotnet build windows/src/Pulgapp.Server.Infrastructure/Pulgapp.Server.Infrastructure.csproj --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.Core/SessionCoordinator.cs`, `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/tests/Pulgapp.Server.Core.Tests/SessionCoordinatorTests.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`.
+- Exceptions: Human multi-phone, driver, and game checks remain pending P2-03. The full solution build is blocked while an already-running `Pulgapp.Server.App` process holds its output DLLs; the changed Infrastructure project builds successfully.
 
 ### P2-02 Add load generation and concurrency verification
 
-- [ ] Implement a loopback load generator using the real WebSocket and UDP protocol.
-- [ ] Simulate 1-8 clients, configurable rate, fixed states, sequence wrap, packet loss, duplicates, and reordering.
-- [ ] Verify four clients at 120 Hz for two hours.
-- [ ] Verify no session can update another session's target.
-- [ ] Verify a fifth X360 request receives `server_full`.
+- [x] Implement a loopback load generator using the real WebSocket and UDP protocol.
+- [x] Simulate 1-8 clients, configurable rate, fixed states, sequence wrap, packet loss, duplicates, and reordering.
+- [x] Verify four clients at 120 Hz for two hours.
+- [x] Verify no session can update another session's target.
+- [x] Verify a fifth X360 request receives `server_full`.
 
-Evidence: pending.
+Evidence (2026-08-24):
+- Automated: `dotnet build windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors, duration 8.07 seconds.
+- Automated: `dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 5 --rate-hz 120 --duration-seconds 10 --loss-every 7 --duplicate-every 5 --reorder-every 9` -> PASS, four independent fixed states with sequence wrap, loss, duplicates, and reordering; mismatched session/token datagrams changed no target; fifth client received `server_full`.
+- Automated: `dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 8 --rate-hz 120 --duration-seconds 10 --loss-every 7 --duplicate-every 5 --reorder-every 9` -> PASS, four active X360 clients and four `server_full` rejections; confirms the P2 simulator accepts the 1-8 range while slots 5-8 remain unavailable until P3.
+- Automated: `dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 4 --rate-hz 120 --duration-seconds 7200 --loss-every 7 --duplicate-every 5 --reorder-every 9` -> PASS, four clients at 120 Hz for 7,200 seconds with internal fixed-state, sequence-wrap, loss, duplicate, reorder, and session-isolation assertions.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors, duration 3.30 seconds.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` -> PASS, 4/4 tests, duration 725 ms.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
+- Artifacts: `windows/tools/Pulgapp.LoadGenerator/Program.cs`, `windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj`, `AGENTS.md`.
+- Exceptions: Human multi-phone, driver, reconnection, and game checks remain pending P2-03.
 
 ### P2-03 Complete multi-client UI and hardware checks
 
-- [ ] Show four independent slot rows and administrative actions.
-- [ ] Display Pulgapp slot separately from XInput user index.
+- [x] Show four independent slot rows and administrative actions.
+- [x] Display Pulgapp slot separately from XInput user index.
 - [ ] Test four real Android phones simultaneously.
 - [ ] Test reconnect inside and outside the lease window.
 
 Gate `G2`: PASS only when four phones independently control four X360 targets for the required stability run.
 
-Evidence: pending.
+Evidence (2026-08-24):
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors, duration 9.33 seconds.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64 --filter "FullyQualifiedName~PulgappServerTests"` -> PASS, 4/4 tests, duration 831 ms.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 tests, duration 776 ms.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.App/MainWindow.xaml`, `windows/src/Pulgapp.Server.App/MainWindow.xaml.cs`, `windows/src/Pulgapp.Server.Core/SessionCoordinator.cs`, `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`.
+- Exceptions: Four real Android phones, lease-window reconnection, driver, Windows device, and game checks remain pending human verification; Gate G2 remains unchecked.
 
 ## Phase P3: DS4 Slots Five Through Eight
 

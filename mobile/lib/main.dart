@@ -69,8 +69,9 @@ final class _ConnectPageState extends State<ConnectPage> {
       _connecting = true;
     });
     final connection = ControllerConnection(
-      preferences: widget.preferences,
+      clientId: widget.preferences.clientId,
       clientName: 'Pulgapp phone',
+      saveEndpoint: widget.preferences.saveEndpoint,
     );
     try {
       await connection.connect(endpoint: _endpoint.text, pin: _pin.text);

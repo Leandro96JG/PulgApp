@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Pulgapp.Server.App\Pulgapp.Server.App.csproj" />
     <ProjectReference Include="..\..\src\Pulgapp.Server.Infrastructure\Pulgapp.Server.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Pulgapp.Server.Core\Pulgapp.Server.Core.csproj" />
   </ItemGroup>

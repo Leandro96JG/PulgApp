@@ -5,104 +5,134 @@ namespace Pulgapp.Server.Core.Tests;
 
 public sealed class SessionCoordinatorTests
 {
-    private static readonly byte[] Token = Convert.FromHexString("00112233445566778899AABBCCDDEEFF");
-
     [Fact]
-    public void Neutral_is_a_single_immutable_zero_state()
+    public void Start_new_allocates_lowest_free_slot_only_after_connecting_target()
     {
-        Assert.Same(GamepadState.Neutral, GamepadState.Neutral);
-        Assert.Equal(new GamepadState(0, 0, 0, 0, 0, 0, 0), GamepadState.Neutral);
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
+
+        var first = coordinator.StartNew("one");
+        var second = coordinator.StartNew("two");
+
+        Assert.Equal(LobbyStartStatus.Success, first.Status);
+        Assert.Equal(1, first.Slot);
+        Assert.Equal(1, factory.Controllers[0].ConnectCount);
+        Assert.Equal(2, second.Slot);
+
+        factory.FailNextConnect = true;
+        var failed = coordinator.StartNew("three");
+
+        Assert.Equal(LobbyStartStatus.ControllerCreateFailed, failed.Status);
+        Assert.Equal(LobbySlotState.Free, coordinator.GetSlotStatuses()[2].State);
+        Assert.Equal(3, coordinator.StartNew("four").Slot);
     }
 
     [Fact]
-    public void Start_creates_and_connects_one_x360_controller()
+    public void New_sessions_fill_four_slots_and_reject_fifth_and_duplicate_client()
     {
-        var controller = new FakeController(ControllerKind.X360);
-        var coordinator = CreateCoordinator(controller, out _);
+        var coordinator = CreateCoordinator(new FakeFactory(), out _);
 
-        coordinator.Start(1, Token);
+        var sessions = Enumerable.Range(1, 4).Select(number => coordinator.StartNew($"client-{number}")).ToArray();
 
-        Assert.True(coordinator.IsActive);
-        Assert.Equal(1, controller.ConnectCount);
+        Assert.Equal([1, 2, 3, 4], sessions.Select(result => result.Slot));
+        Assert.Equal(LobbyStartStatus.ServerFull, coordinator.StartNew("client-5").Status);
+        Assert.Equal(LobbyStartStatus.ClientAlreadyConnected, coordinator.StartNew("client-1").Status);
     }
 
     [Fact]
-    public void Accepts_only_authenticated_newer_snapshots()
+    public void Control_loss_leases_neutralized_target_and_resume_reuses_slot_with_fresh_credentials()
     {
-        var controller = new FakeController(ControllerKind.X360);
-        var coordinator = CreateCoordinator(controller, out _);
-        coordinator.Start(1, Token);
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
+        var original = coordinator.StartNew("client-1");
 
-        Assert.True(coordinator.TryAccept(Snapshot(sequence: 10)));
-        Assert.False(coordinator.TryAccept(Snapshot(sequence: 10)));
-        Assert.False(coordinator.TryAccept(Snapshot(sequence: 9)));
-        Assert.False(coordinator.TryAccept(Snapshot(sessionId: 2, sequence: 11)));
-        Assert.False(coordinator.TryAccept(Snapshot(token: new byte[16], sequence: 11)));
-        Assert.Single(controller.AppliedStates);
-        Assert.Equal(new GamepadState((uint)CanonicalButtons.A, 1, 2, 3, 4, 5, 6), controller.AppliedStates[0]);
+        Assert.True(coordinator.HandleControlLoss(original.Credentials!.SessionId));
+        Assert.Equal(1, factory.Controllers[0].NeutralizeCount);
+        Assert.Equal(LobbySlotState.Reserved, coordinator.GetSlotStatuses()[0].State);
+        Assert.False(coordinator.TryAccept(Snapshot(original.Credentials, 1)));
+        Assert.Equal(LobbyStartStatus.ResumeRejected, coordinator.Resume("other-client", original.Credentials.ResumeToken).Status);
+
+        var resumed = coordinator.Resume("client-1", original.Credentials.ResumeToken);
+
+        Assert.Equal(LobbyStartStatus.Success, resumed.Status);
+        Assert.Equal(original.Slot, resumed.Slot);
+        Assert.Same(factory.Controllers[0], factory.Controllers.Single());
+        Assert.NotEqual(original.Credentials.SessionId, resumed.Credentials!.SessionId);
+        Assert.False(original.Credentials.UdpToken.SequenceEqual(resumed.Credentials.UdpToken));
+        Assert.False(original.Credentials.ResumeToken.SequenceEqual(resumed.Credentials.ResumeToken));
+        Assert.True(coordinator.TryAccept(Snapshot(resumed.Credentials, 1)));
     }
 
     [Fact]
-    public void Watchdog_neutralizes_once_at_250_ms_and_a_valid_packet_restores_input()
+    public void Lease_expiry_disconnects_and_frees_slot()
     {
-        var controller = new FakeController(ControllerKind.X360);
-        var coordinator = CreateCoordinator(controller, out var clock);
-        coordinator.Start(1, Token);
-        clock.Advance(TimeSpan.FromMilliseconds(249));
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out var clock);
+        var session = coordinator.StartNew("client-1");
+        coordinator.HandleControlLoss(session.Credentials!.SessionId);
 
-        Assert.False(coordinator.CheckInputTimeout());
-        clock.Advance(TimeSpan.FromMilliseconds(1));
-        Assert.True(coordinator.CheckInputTimeout());
-        Assert.True(coordinator.IsInputTimedOut);
-        Assert.False(coordinator.CheckInputTimeout());
-        Assert.Equal(1, controller.NeutralizeCount);
+        clock.Advance(TimeSpan.FromSeconds(15));
 
-        Assert.True(coordinator.TryAccept(Snapshot(sequence: 1)));
-        Assert.False(coordinator.IsInputTimedOut);
+        Assert.Equal(1, coordinator.ExpireLeases());
+        Assert.Equal(1, factory.Controllers[0].DisconnectCount);
+        Assert.Equal(LobbySlotState.Free, coordinator.GetSlotStatuses()[0].State);
+        Assert.Equal(1, coordinator.StartNew("client-2").Slot);
     }
 
     [Theory]
-    [InlineData("control-loss", 0)]
-    [InlineData("leave", 1)]
-    [InlineData("shutdown", 1)]
-    [InlineData("cancellation", 1)]
-    public void Ownership_loss_paths_always_neutralize(string action, int expectedDisconnects)
+    [InlineData("release")]
+    [InlineData("shutdown")]
+    public void Release_paths_immediately_neutralize_disconnect_and_free_allocation(string action)
     {
-        var controller = new FakeController(ControllerKind.X360);
-        var coordinator = CreateCoordinator(controller, out _);
-        coordinator.Start(1, Token);
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
+        var session = coordinator.StartNew("client-1");
 
-        switch (action)
+        if (action == "release")
         {
-            case "control-loss":
-                coordinator.HandleControlLoss();
-                break;
-            case "leave":
-                coordinator.Leave();
-                break;
-            case "shutdown":
-                coordinator.Shutdown();
-                break;
-            case "cancellation":
-                coordinator.Cancel();
-                break;
-            default:
-                throw new InvalidOperationException();
+            Assert.True(coordinator.Release(session.Credentials!.SessionId));
+        }
+        else
+        {
+            coordinator.Shutdown();
         }
 
-        Assert.Equal(1, controller.NeutralizeCount);
-        Assert.Equal(expectedDisconnects, controller.DisconnectCount);
+        Assert.Equal(1, factory.Controllers[0].NeutralizeCount);
+        Assert.Equal(1, factory.Controllers[0].DisconnectCount);
+        Assert.Equal(1, coordinator.StartNew("client-2").Slot);
     }
 
-    private static SessionCoordinator CreateCoordinator(FakeController controller, out FakeTimeProvider clock)
+    [Fact]
+    public void Authenticated_newer_snapshots_remain_isolated_per_session_and_timeout_independently()
+    {
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out var clock);
+        var first = coordinator.StartNew("client-1").Credentials!;
+        var second = coordinator.StartNew("client-2").Credentials!;
+
+        Assert.True(coordinator.TryAccept(Snapshot(first, 10)));
+        Assert.False(coordinator.TryAccept(Snapshot(first, 10)));
+        Assert.False(coordinator.TryAccept(Snapshot(first, 9)));
+        Assert.False(coordinator.TryAccept(Snapshot(first with { SessionId = second.SessionId }, 11)));
+        Assert.True(coordinator.TryAccept(Snapshot(second, 1)));
+        clock.Advance(TimeSpan.FromMilliseconds(250));
+
+        Assert.True(coordinator.CheckInputTimeout());
+        Assert.Equal(1, factory.Controllers[0].NeutralizeCount);
+        Assert.Equal(1, factory.Controllers[1].NeutralizeCount);
+        Assert.True(coordinator.TryAccept(Snapshot(first, 11)));
+        Assert.Equal(LobbySlotState.Active, coordinator.GetSlotStatuses()[0].State);
+    }
+
+    private static SessionCoordinator CreateCoordinator(FakeFactory factory, out FakeTimeProvider clock)
     {
         clock = new FakeTimeProvider();
-        return new SessionCoordinator(new FakeFactory(controller), clock);
+        return new SessionCoordinator(factory, clock);
     }
 
-    private static InputSnapshot Snapshot(ulong sessionId = 1, byte[]? token = null, uint sequence = 1) => new(
-        sessionId,
-        token ?? Token,
+    private static InputSnapshot Snapshot(SessionCredentials credentials, uint sequence) => new(
+        credentials.SessionId,
+        credentials.UdpToken,
         sequence,
         0,
         CanonicalButtons.A,
@@ -113,42 +143,46 @@ public sealed class SessionCoordinatorTests
         5,
         6);
 
-    private sealed class FakeFactory(FakeController controller) : VirtualControllerFactory
+    private sealed class FakeFactory : VirtualControllerFactory
     {
+        public List<FakeController> Controllers { get; } = [];
+        public bool FailNextConnect { get; set; }
+
         public VirtualController Create(ControllerKind kind)
         {
             Assert.Equal(ControllerKind.X360, kind);
+            var controller = new FakeController(kind, FailNextConnect);
+            FailNextConnect = false;
+            Controllers.Add(controller);
             return controller;
         }
     }
 
-    private sealed class FakeController(ControllerKind kind) : VirtualController
+    private sealed class FakeController(ControllerKind kind, bool failConnect) : VirtualController
     {
         public ControllerKind Kind { get; } = kind;
-
         public int ConnectCount { get; private set; }
-
         public int NeutralizeCount { get; private set; }
-
         public int DisconnectCount { get; private set; }
 
-        public List<GamepadState> AppliedStates { get; } = [];
+        public void Connect()
+        {
+            ConnectCount++;
+            if (failConnect)
+            {
+                throw new InvalidOperationException("Connect failed.");
+            }
+        }
 
-        public void Connect() => ConnectCount++;
-
-        public void Apply(GamepadState state) => AppliedStates.Add(state);
-
+        public void Apply(GamepadState state) { }
         public void Neutralize() => NeutralizeCount++;
-
         public void Disconnect() => DisconnectCount++;
     }
 
     private sealed class FakeTimeProvider : TimeProvider
     {
         private DateTimeOffset _utcNow = DateTimeOffset.UnixEpoch;
-
         public override DateTimeOffset GetUtcNow() => _utcNow;
-
         public void Advance(TimeSpan elapsed) => _utcNow += elapsed;
     }
 }
