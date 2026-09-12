@@ -48,6 +48,7 @@ final class ConnectPage extends StatefulWidget {
 final class _ConnectPageState extends State<ConnectPage> {
   late final TextEditingController _endpoint;
   final _pin = TextEditingController();
+  bool _showPin = true;
   String? _error;
   String? _endpointError;
   String? _pinError;
@@ -127,10 +128,58 @@ final class _ConnectPageState extends State<ConnectPage> {
         );
         return;
       }
-      setState(() {
-        _endpoint.text = servers.first.host;
-        _endpointError = null;
-      });
+      if (servers.length == 1) {
+        setState(() {
+          _endpoint.text = servers.first.host;
+          _endpointError = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Found server: ${servers.first.host}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        final chosen = await showModalBottomSheet<DiscoveredServer>(
+          context: context,
+          builder: (sheetContext) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Available servers (${servers.length})',
+                    style: Theme.of(sheetContext).textTheme.titleMedium,
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: servers.length,
+                    itemBuilder: (context, index) {
+                      final server = servers[index];
+                      return ListTile(
+                        leading: const Icon(Icons.sports_esports_rounded),
+                        title: Text(server.host),
+                        subtitle: Text(server.name),
+                        onTap: () => Navigator.of(sheetContext).pop(server),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (mounted && chosen != null) {
+          setState(() {
+            _endpoint.text = chosen.host;
+            _endpointError = null;
+          });
+        }
+      }
     } catch (_) {
       if (mounted) {
         setState(
@@ -224,7 +273,7 @@ final class _ConnectPageState extends State<ConnectPage> {
           final pinField = TextField(
             key: const ValueKey('pin-field'),
             controller: _pin,
-            obscureText: true,
+            obscureText: !_showPin,
             keyboardType: TextInputType.number,
             textInputAction: TextInputAction.done,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -247,6 +296,17 @@ final class _ConnectPageState extends State<ConnectPage> {
               icon: Icons.dialpad_rounded,
               error: _pinError,
               compact: compact,
+              suffix: IconButton(
+                key: const ValueKey('toggle-pin-visibility'),
+                icon: Icon(
+                  _showPin
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  size: compact ? 18 : 22,
+                ),
+                tooltip: _showPin ? 'Hide PIN' : 'Show PIN',
+                onPressed: () => setState(() => _showPin = !_showPin),
+              ),
             ).copyWith(counterText: ''),
           );
           return SingleChildScrollView(
@@ -438,11 +498,13 @@ final class _ConnectPageState extends State<ConnectPage> {
     required IconData icon,
     required String? error,
     required bool compact,
+    Widget? suffix,
   }) => InputDecoration(
     labelText: label,
     hintText: hint,
     errorText: error,
     prefixIcon: Icon(icon),
+    suffixIcon: suffix,
     filled: true,
     isDense: compact,
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),

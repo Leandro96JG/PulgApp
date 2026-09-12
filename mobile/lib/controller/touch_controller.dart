@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../gamepad_input_model.dart';
 import '../gamepad_state.dart';
@@ -253,7 +254,10 @@ class _TouchButton extends StatelessWidget {
       child: Listener(
         key: ValueKey('control-$controlId'),
         behavior: HitTestBehavior.opaque,
-        onPointerDown: (event) => model.pressButton(event.pointer, bit),
+        onPointerDown: (event) {
+          HapticFeedback.lightImpact();
+          model.pressButton(event.pointer, bit);
+        },
         onPointerUp: (event) => model.releasePointer(event.pointer),
         onPointerCancel: (event) => model.releasePointer(event.pointer),
         child: AnimatedContainer(
@@ -319,7 +323,7 @@ class _GestureSurface extends StatefulWidget {
   final GamepadInputModel model;
   final void Function(int pointer, Offset position, Offset origin, Size size)
   onUpdate;
-  final Widget Function(Size size, bool active) builder;
+  final Widget Function(Size size, bool active, Offset origin) builder;
 
   @override
   State<_GestureSurface> createState() => _GestureSurfaceState();
@@ -379,7 +383,7 @@ class _GestureSurfaceState extends State<_GestureSurface> {
               border: Border.all(color: _pointer == null ? _outline : _accent),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: widget.builder(bounds.biggest, _pointer != null),
+            child: widget.builder(bounds.biggest, _pointer != null, _origin),
           ),
         ),
       );
@@ -415,45 +419,58 @@ class _Stick extends StatelessWidget {
         y: clamped.dy,
       );
     },
-    builder: (size, active) {
+    builder: (size, active, origin) {
       final diameter = math.min(size.width, size.height) * .80;
+      final radius = diameter / 2;
       final x = (left ? model.state.leftX : model.state.rightX) / 32767;
       final y = -(left ? model.state.leftY : model.state.rightY) / 32767;
-      return Center(
-        child: Container(
-          width: diameter,
-          height: diameter,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: _outline, width: 2),
-          ),
-          child: Center(
-            child: Transform.translate(
-              offset: Offset(x, y) * diameter * .22,
-              child: Container(
-                width: diameter * .52,
-                height: diameter * .52,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: active ? _accent : _control,
-                  border: Border.all(
-                    color: _accent.withValues(alpha: .6),
-                    width: 2,
-                  ),
-                ),
-                child: Text(
-                  left ? 'LS' : 'RS',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: active ? _surface : _ink,
+      final center = active
+          ? Offset(
+              origin.dx.clamp(radius, size.width - radius),
+              origin.dy.clamp(radius, size.height - radius),
+            )
+          : Offset(size.width / 2, size.height / 2);
+      return Stack(
+        children: [
+          Positioned(
+            left: center.dx - radius,
+            top: center.dy - radius,
+            width: diameter,
+            height: diameter,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: _outline, width: 2),
+              ),
+              child: Center(
+                child: Transform.translate(
+                  offset: Offset(x, y) * diameter * .22,
+                  child: Container(
+                    width: diameter * .52,
+                    height: diameter * .52,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: active ? _accent : _control,
+                      border: Border.all(
+                        color: _accent.withValues(alpha: .6),
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      left ? 'LS' : 'RS',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: active ? _surface : _ink,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+        ],
       );
     },
   );
@@ -482,9 +499,17 @@ class _Dpad extends StatelessWidget {
           bits |= delta.dy < 0 ? GamepadButton.dpadUp : GamepadButton.dpadDown;
         }
       }
+      final currentDpad = model.state.buttons &
+          (GamepadButton.dpadUp |
+              GamepadButton.dpadDown |
+              GamepadButton.dpadLeft |
+              GamepadButton.dpadRight);
+      if (bits != 0 && bits != currentDpad) {
+        HapticFeedback.selectionClick();
+      }
       model.pressButton(pointer, bits);
     },
-    builder: (size, active) => Stack(
+    builder: (size, active, origin) => Stack(
       children: [
         for (final item in const [
           (Alignment(0, -.72), Icons.keyboard_arrow_up, GamepadButton.dpadUp),
@@ -536,12 +561,19 @@ class _Trigger extends StatelessWidget {
   Widget build(BuildContext context) => _GestureSurface(
     id: left ? 'LT' : 'RT',
     model: model,
-    onUpdate: (pointer, position, origin, size) => model.updateTrigger(
-      pointer: pointer,
-      left: left,
-      amount: 1 - position.dy / size.height,
-    ),
-    builder: (size, active) => Stack(
+    onUpdate: (pointer, position, origin, size) {
+      final prev = left ? model.state.leftTrigger : model.state.rightTrigger;
+      final amount = 1 - position.dy / size.height;
+      if (prev == 0 && amount > 0) {
+        HapticFeedback.selectionClick();
+      }
+      model.updateTrigger(
+        pointer: pointer,
+        left: left,
+        amount: amount,
+      );
+    },
+    builder: (size, active, origin) => Stack(
       children: [
         Align(
           alignment: Alignment.bottomCenter,

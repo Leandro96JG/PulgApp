@@ -104,4 +104,17 @@ void main() {
     expect(find.textContaining('A → B'), findsOneWidget);
     expect(find.textContaining('B → A'), findsOneWidget);
   });
+
+  testWidgets('PIN visibility can be toggled', (tester) async {
+    await _showConnectPage(tester, size: const Size(640, 320));
+    final pinFieldFinder = find.byKey(const ValueKey('pin-field'));
+    var pinField = tester.widget<TextField>(pinFieldFinder);
+    expect(pinField.obscureText, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('toggle-pin-visibility')));
+    await tester.pump();
+
+    pinField = tester.widget<TextField>(pinFieldFinder);
+    expect(pinField.obscureText, isTrue);
+  });
 }
