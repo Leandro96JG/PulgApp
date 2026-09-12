@@ -481,6 +481,10 @@ P5 controller-customization progress (2026-09-03):
 - Version-1 through version-3 profiles migrate to the safe default layout. Profile persistence, custom-order geometry and non-overlap tests pass. Physical acceptance and local haptics remain pending.
 - Pairing UI corrected on 2026-09-04: IP and PIN share the available width in landscape, stack in portrait, retain scrolling with the keyboard, and show field-specific validation instead of raw exceptions. The selected profile also exposes its active mapping before connection.
 - Remapped controller buttons now display both position and action (for example `A → B`) while preserving the large touch target. Responsive login and mapping-display regression tests pass at 640×320 and with enlarged text.
+- Added PIN visibility toggle (with eye icon, visible by default) and discovered-servers bottom-sheet selector on 2026-09-12.
+- Added local haptic feedback on button presses, D-pad changes, and trigger activations on 2026-09-12.
+- Added floating visual joystick base ring centered dynamically at touch origin on 2026-09-12.
+- Branch `feature/ux-and-controls-improvements` created and pushed to GitHub; verified with `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (45/45 tests pass), and `flutter build apk --debug --no-pub`.
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 
