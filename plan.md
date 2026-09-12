@@ -486,6 +486,7 @@ P5 controller-customization progress (2026-09-03):
 - Added floating visual joystick base ring centered dynamically at touch origin on 2026-09-12.
 - Added offline test pad (`ControllerTestPadPage`), digital trigger mode setting per profile, double-tap on sticks for L3/R3, and PIN pre-population and local persistence on 2026-09-12.
 - Branch `feature/ux-and-controls-improvements` pushed to GitHub; verified with `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (50/50 tests pass), `flutter build apk --debug --no-pub`, and Windows `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (39/39 tests pass).
+- Manual (2026-09-12, user-reported): physical testing of all UX and controls improvements (PIN persistence, digital triggers, stick double-tap for L3/R3, and offline Test Pad) passed successfully.
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 
