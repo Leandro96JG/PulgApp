@@ -78,18 +78,18 @@ Failure policy: stop after documenting the failed matrix. Device enumeration alo
 
 ## Gate G2: Four X360 Clients
 
-- [ ] Four phones receive unique slots 1-4.
-- [ ] Four independent fixed test states appear on four targets.
-- [ ] Fifth client receives `server_full` without target leakage.
-- [ ] Resume inside 15 seconds keeps target identity and slot.
-- [ ] Lease expiry neutralizes, disconnects, and frees the slot.
-- [ ] Four-client 120 Hz load test runs for two hours.
-- [ ] Four-real-phone test passes.
+- [x] Four phones receive unique slots 1-4.
+- [x] Four independent fixed test states appear on four targets.
+- [x] Fifth client receives `server_full` without target leakage.
+- [x] Resume inside 15 seconds keeps target identity and slot.
+- [x] Lease expiry neutralizes, disconnects, and frees the slot.
+- [x] Four-client 120 Hz load test runs for two hours.
+- [x] Four-real-phone test passes.
 
 ## Gate G3: Eight Mixed Controllers
 
-- [ ] Slots 1-4 are X360 and slots 5-8 are DS4.
-- [ ] DS4 Y axes, hat directions, face buttons, and triggers map correctly.
+- [x] Slots 1-4 are X360 and slots 5-8 are DS4.
+- [x] DS4 Y axes, hat directions, face buttons, and triggers map correctly.
 - [ ] Eight-client simulated load test runs for two hours.
 - [ ] Eight real clients or the agreed real-phone/load-generator combination remain independent.
 - [ ] Pummel Party allows all eight to join and control distinct players.

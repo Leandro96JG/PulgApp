@@ -2,11 +2,14 @@ import 'dart:math';
 
 import 'package:flutter/services.dart';
 
+import 'controller_profile.dart';
+
 final class ClientPreferences {
   ClientPreferences._(this._values);
 
   static const _clientIdKey = 'client-id';
   static const _endpointKey = 'last-endpoint';
+  static const _profilesKey = 'controller-profiles-v1';
   static const _channel = MethodChannel('pulgapp/preferences');
   final Map<String, String> _values;
 
@@ -40,6 +43,18 @@ final class ClientPreferences {
   }
 
   String? get lastEndpoint => _values[_endpointKey];
+
+  ControllerProfileLibrary get controllerProfiles =>
+      ControllerProfileLibrary.decode(_values[_profilesKey]);
+
+  Future<void> saveControllerProfiles(ControllerProfileLibrary profiles) async {
+    final value = profiles.encode();
+    _values[_profilesKey] = value;
+    await _channel.invokeMethod<void>('setString', {
+      'key': _profilesKey,
+      'value': value,
+    });
+  }
 
   Future<void> saveEndpoint(String endpoint) async {
     _values[_endpointKey] = endpoint;

@@ -29,11 +29,12 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 
 ## Current Status
 
-- Current phase: `P2 - Four Independent X360 Clients`
-- Next task: `P2-03` Complete multi-client UI and hardware checks
-- Last completed task: `P2-02` Add load generation and concurrency verification
+- Current phase: `P5 - Product UX And Optional Feedback`
+- Next task: `P5-03` Add controller customization settings
+- Last completed task: `P5-02` Add versioned local controller profiles
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
+- Branch exception: On `codex/defer-g3-physical-validation`, the project owner authorized P4 work before the remaining G3 physical compatibility matrix and two-hour load run. G3 remains deferred and must not be reported as passed or used as release evidence.
 
 ## Repository Shape
 
@@ -362,8 +363,9 @@ Evidence (2026-08-24):
 
 - [x] Show four independent slot rows and administrative actions.
 - [x] Display Pulgapp slot separately from XInput user index.
-- [ ] Test four real Android phones simultaneously.
-- [ ] Test reconnect inside and outside the lease window.
+- [x] Test four real Android phones simultaneously.
+- [x] Test reconnect inside the 15-second lease window.
+- [x] Test reconnect after the lease window expires.
 
 Gate `G2`: PASS only when four phones independently control four X360 targets for the required stability run.
 
@@ -373,7 +375,20 @@ Evidence (2026-08-24):
 - Automated: `dotnet test windows/tests/Pulgapp.Server.IntegrationTests/Pulgapp.Server.IntegrationTests.csproj --configuration Release --no-build -p:Platform=x64` -> PASS, 4/4 tests, duration 776 ms.
 - Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 31/31 driver-free tests.
 - Artifacts: `windows/src/Pulgapp.Server.App/MainWindow.xaml`, `windows/src/Pulgapp.Server.App/MainWindow.xaml.cs`, `windows/src/Pulgapp.Server.Core/SessionCoordinator.cs`, `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`.
-- Exceptions: Four real Android phones, lease-window reconnection, driver, Windows device, and game checks remain pending human verification; Gate G2 remains unchecked.
+
+Evidence (2026-08-25, user-reported manual verification):
+- Four real Android phones controlled four independent X360 targets successfully in Pummel Party and Overcooked! 2.
+- Returning to the phone start screen or navigating back prompts for the server IP and PIN, then reuses the saved values and reconnects to the previous controller without re-entering them.
+- After more than 15 seconds disconnected, the previous slot is released as expected.
+- User reports that the installed driver recognized all controls and buttons correctly.
+- A 30–40 minute real-game run worked; around minute 20 there was one simultaneous disconnection while the PC was busy with another task. The app stayed open, and returning/back plus reconnecting restored each phone to its previous slot. The cause of that interruption is unknown.
+- Exceptions: Root-cause investigation for the simultaneous interruption, driver/Windows-device evidence details, and the remaining G2 stability evidence remain pending; Gate G2 remains unchecked.
+
+Evidence (2026-08-29, user-reported manual verification):
+- Four-phone session remained stable for 20 minutes.
+- Reconnection behavior worked correctly.
+- Virtual-controller drivers worked correctly.
+- Gate G2: PASS. Proceed to P3-01.
 
 ## Phase P3: DS4 Slots Five Through Eight
 
@@ -381,46 +396,91 @@ Goal: expose four additional HID devices without violating the XInput limit.
 
 ### P3-01 Implement the DS4 adapter
 
-- [ ] Add pure DS4 report mapping with full tests.
-- [ ] Invert only DS4 Y axes.
-- [ ] Convert canonical D-pad bits to one DS4 hat direction.
-- [ ] Map A/B/X/Y to Cross/Circle/Square/Triangle.
-- [ ] Set analog L2/R2 values and their digital button state when nonzero.
-- [ ] Set `AutoSubmitReport = false` and submit one complete report per snapshot.
+- [x] Add pure DS4 report mapping with full tests.
+- [x] Invert only DS4 Y axes.
+- [x] Convert canonical D-pad bits to one DS4 hat direction.
+- [x] Map A/B/X/Y to Cross/Circle/Square/Triangle.
+- [x] Set analog L2/R2 values and their digital button state when nonzero.
+- [x] Set `AutoSubmitReport = false` and submit one complete report per snapshot.
 
-Evidence: pending.
+Evidence (2026-08-29):
+- Automated: `dotnet build windows/src/Pulgapp.Server.Infrastructure/Pulgapp.Server.Infrastructure.csproj --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/tests/Pulgapp.Server.Infrastructure.Tests/Pulgapp.Server.Infrastructure.Tests.csproj --configuration Release -p:Platform=x64` -> PASS, 15/15 tests.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 39/39 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.Infrastructure/Ds4ReportMapper.cs`, `windows/src/Pulgapp.Server.Infrastructure/X360VirtualController.cs`, `windows/tests/Pulgapp.Server.Infrastructure.Tests/Ds4ReportMapperTests.cs`.
+- Exceptions: DS4 targets are not assigned to lobby slots until P3-02.
 
 ### P3-02 Expand lobby and perform eight-client tests
 
-- [ ] Enable slots 5-8 as fixed DS4 targets.
-- [ ] Refuse any attempt to configure slots 5-8 as X360.
-- [ ] Extend WPF status and load generator to eight clients.
+- [x] Enable slots 5-8 as fixed DS4 targets.
+- [x] Refuse any attempt to configure slots 5-8 as X360.
+- [x] Extend WPF status and load generator to eight clients.
 - [ ] Run eight simulated clients for two hours.
 - [ ] Run the complete compatibility matrix again with real devices/phones.
 
 Gate `G3`: PASS only when Pummel Party accepts eight independent players from four X360 plus four DS4 targets.
 
-Evidence: pending.
+Evidence (2026-08-29):
+- Automated: `dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release -p:Platform=x64 -- --clients 8 --rate-hz 120 --duration-seconds 10 --loss-every 7 --duplicate-every 5 --reorder-every 9` -> PASS, eight independent controller slots at 120 Hz with sequence wrap, loss, duplicates, reordering, and cross-session credential isolation.
+- Automated: `dotnet run --project windows/tools/Pulgapp.LoadGenerator/Pulgapp.LoadGenerator.csproj --configuration Release --no-build -p:Platform=x64 -- --clients 8 --rate-hz 120 --duration-seconds 1800 --loss-every 7 --duplicate-every 5 --reorder-every 9` -> PASS, eight active clients at 120 Hz for 1,800 seconds. Two-hour run deferred at user request.
+- Automated: `dotnet build windows/Pulgapp.sln --configuration Release --no-restore -p:Platform=x64` -> PASS, 0 warnings, 0 errors.
+- Automated: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` -> PASS, 39/39 driver-free tests.
+- Artifacts: `windows/src/Pulgapp.Server.Core/SessionCoordinator.cs`, `windows/src/Pulgapp.Server.Infrastructure/PulgappServer.cs`, `windows/tools/Pulgapp.LoadGenerator/Program.cs`, `windows/tests/Pulgapp.Server.Core.Tests/SessionCoordinatorTests.cs`, `windows/tests/Pulgapp.Server.IntegrationTests/PulgappServerTests.cs`.
+- Exceptions: The two-hour simulator run and real four-X360/four-DS4 compatibility matrix remain deferred by project-owner decision on `codex/defer-g3-physical-validation`. Gate G3 remains unchecked.
 
 ## Phase P4: Discovery And Robust Recovery
 
-- [ ] Pin `Makaretu.Dns.Multicast` 0.27.0 in Windows Infrastructure and `multicast_dns` 0.3.3+1 in Flutter; keep both behind discovery modules because mDNS remains optional.
-- [ ] Advertise `_pulgapp._tcp.local.` without exposing the PIN.
-- [ ] Discover with Flutter mDNS and retain manual entry.
-- [ ] Hold Android multicast resources only during discovery.
-- [ ] Implement reconnect delays of 250 ms, 500 ms, 1 s, and then 2 s until lease expiry.
-- [ ] Add clear states for control connected/input missing and discovery blocked.
-- [ ] Test mDNS success, mDNS failure, AP isolation, WiFi toggle, and server restart.
+- [x] Pin `Makaretu.Dns.Multicast` 0.27.0 in Windows Infrastructure and `multicast_dns` 0.3.3+1 in Flutter; keep both behind discovery modules because mDNS remains optional.
+- [x] Advertise `_pulgapp._tcp.local.` without exposing the PIN.
+- [x] Discover with Flutter mDNS and retain manual entry.
+- [x] Hold Android multicast resources only during discovery.
+- [x] Implement reconnect delays of 250 ms, 500 ms, 1 s, and then 2 s until lease expiry.
+- [x] Add clear states for control connected/input missing and discovery blocked.
+- [x] Test mDNS success, mDNS failure, AP isolation, WiFi toggle, and server restart.
 
 Gate `G4`: automatic discovery works on supported LANs and manual IPv4 remains reliable everywhere else.
 
+Evidence (2026-08-31, user-reported manual verification):
+- Manual IPv4 pairing, mDNS discovery, app lifecycle reconnection, and the fallback behavior were verified successfully.
+- Manual (2026-08-31, user-reported): reconnect backoff and the P4 network-failure checks were approved.
+- Gate G4: PASS. Proceed to P5-01.
+
 ## Phase P5: Product UX And Optional Feedback
 
-- [ ] Add versioned local controller profiles without changing the wire protocol.
+- [x] Implement and validate the fixed ergonomic controller layout in `docs/controller-layout-plan.md` after Gates G2-G4 pass.
+- [x] Add versioned local controller profiles without changing the wire protocol.
 - [ ] Add layout movement/sizing, button remapping, dead zones, sensitivity, and local haptics.
+- [x] Design a touch-first layout with large, well-spaced buttons, clear grouping, and minimal visual status so the player can play without watching the phone screen.
+- [x] Validate the layout with multitouch, accidental touch prevention, landscape orientation, and small-phone safe areas.
 - [ ] Add optional rumble forwarding over WebSocket.
 - [ ] Add QR connection, tray behavior, single-instance handling, and start-at-login.
 - [ ] Verify safe areas and multitouch on small phones and tablets.
+
+P5 fixed-layout implementation evidence (2026-08-31):
+- User authorized a touch-first arrangement instead of Xbox/PS4 geometry.
+- Reproduced overlapping A/B hit regions with a failing widget test, then replaced the fixed diamond stacks with disjoint rectangular zones and 8px gutters.
+- Added `TouchController`: floating-origin sticks, eight-way sliding D-pad, analog triggers, large colored action tiles, and immediate press feedback with a short visual transition.
+- Added 24 controller tests covering five landscape sizes with safe insets at three text scales, minimum 48px targets, multitouch, release/cancellation, lifecycle and connection-loss neutralization.
+- Verified `flutter analyze --no-pub`, `flutter test --no-pub` (30 tests), and `flutter build apk --debug --no-pub`. APK: `mobile/build/app/outputs/flutter-apk/app-debug.apk`.
+- Manual (2026-09-03, user-reported): controls were used on a real phone and work very well. The fixed-layout acceptance is approved.
+- This does not close G3, G5, the deferred eight-phone game test, or the tablet-specific check.
+
+P5 local-profile implementation evidence (2026-09-03):
+- Added versioned local profile storage with a protected Default fallback. Corrupt, unknown-version and malformed data recover safely without touching server, endpoint, PIN or controller transport data.
+- Added a profile manager before connection: create, select, rename and delete custom profiles. The active profile persists on the phone.
+- Verified schema recovery, round trip, deletion fallback and UI persistence with focused tests.
+
+P5 controller-customization progress (2026-09-03):
+- Custom profiles now expose stick dead-zone (0–30%) and sensitivity (0.5×–1.5×) settings. The selected profile applies these values when starting a controller session.
+- Existing version-1 profiles migrate to safe default stick settings.
+- Manual (2026-09-04, user-reported): profile creation, persistence, stick dead-zone and sensitivity behavior were tested successfully on a real phone.
+- Button remapping implemented on 2026-09-04 for A, B, X, Y, LB, RB, Back, Guide, Start, L3 and R3. Reassigning an action swaps it with the previous owner so every button remains reachable; labels and emitted button bits both follow the selected profile.
+- Version-1 and version-2 profiles migrate to the identity button map. Focused mapping and touch-output tests pass.
+- Layout editing implemented on 2026-09-04. Each profile can reorder the left stick, D-pad, right stick and action zones, and resize them on a constrained ten-unit grid. The grid preserves minimum touch sizes, prevents overlap and always fits the available width.
+- Version-1 through version-3 profiles migrate to the safe default layout. Profile persistence, custom-order geometry and non-overlap tests pass. Physical acceptance and local haptics remain pending.
+- Pairing UI corrected on 2026-09-04: IP and PIN share the available width in landscape, stack in portrait, retain scrolling with the keyboard, and show field-specific validation instead of raw exceptions. The selected profile also exposes its active mapping before connection.
+- Remapped controller buttons now display both position and action (for example `A → B`) while preserving the large touch target. Responsive login and mapping-display regression tests pass at 640×320 and with enlarged text.
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 

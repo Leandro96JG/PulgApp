@@ -23,23 +23,23 @@ public enum LobbySlotState
 
 public sealed record SessionCredentials(ulong SessionId, byte[] UdpToken, byte[] ResumeToken);
 
-public sealed record LobbyStartResult(LobbyStartStatus Status, int? Slot = null, SessionCredentials? Credentials = null)
+public sealed record LobbyStartResult(LobbyStartStatus Status, int? Slot = null, SessionCredentials? Credentials = null, string? FailureDetail = null)
 {
     public bool Succeeded => Status == LobbyStartStatus.Success;
 }
 
-public sealed record LobbySlotStatus(int Slot, LobbySlotState State, string? ClientId, uint? LastSequence);
+public sealed record LobbySlotStatus(int Slot, ControllerKind ControllerKind, LobbySlotState State, string? ClientId, uint? LastSequence);
 
 public sealed class SessionCoordinator : IDisposable
 {
     private static readonly TimeSpan InputTimeout = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan SlotLease = TimeSpan.FromSeconds(15);
-    private const int SlotCount = 4;
+    private const int SlotCount = 8;
 
     private readonly object _gate = new();
     private readonly VirtualControllerFactory _controllerFactory;
     private readonly TimeProvider _timeProvider;
-    private readonly Slot[] _slots = Enumerable.Range(1, SlotCount).Select(slot => new Slot(slot)).ToArray();
+    private readonly Slot[] _slots = Enumerable.Range(1, SlotCount).Select(slot => new Slot(slot, slot <= 4 ? ControllerKind.X360 : ControllerKind.Ds4)).ToArray();
 
     public SessionCoordinator(VirtualControllerFactory controllerFactory, TimeProvider timeProvider)
     {
@@ -243,7 +243,7 @@ public sealed class SessionCoordinator : IDisposable
     {
         lock (_gate)
         {
-            return _slots.Select(slot => new LobbySlotStatus(slot.Number, slot.State, slot.ClientId, slot.LastSequence)).ToArray();
+            return _slots.Select(slot => new LobbySlotStatus(slot.Number, slot.ControllerKind, slot.State, slot.ClientId, slot.LastSequence)).ToArray();
         }
     }
 
@@ -252,7 +252,7 @@ public sealed class SessionCoordinator : IDisposable
         lock (_gate)
         {
             var slot = _slots.SingleOrDefault(slot => slot.State != LobbySlotState.Free && slot.SessionId == sessionId);
-            status = slot is null ? null : new LobbySlotStatus(slot.Number, slot.State, slot.ClientId, slot.LastSequence);
+            status = slot is null ? null : new LobbySlotStatus(slot.Number, slot.ControllerKind, slot.State, slot.ClientId, slot.LastSequence);
             return status is not null;
         }
     }
@@ -312,10 +312,10 @@ public sealed class SessionCoordinator : IDisposable
         {
             if (!resumed)
             {
-                controller = _controllerFactory.Create(ControllerKind.X360);
-                if (controller.Kind != ControllerKind.X360)
+                controller = _controllerFactory.Create(slot.ControllerKind);
+                if (controller.Kind != slot.ControllerKind)
                 {
-                    throw new InvalidOperationException("Slots 1-4 require X360 controllers.");
+                    throw new InvalidOperationException($"Slot {slot.Number} requires a {slot.ControllerKind} controller.");
                 }
 
                 controller.Connect();
@@ -332,7 +332,7 @@ public sealed class SessionCoordinator : IDisposable
             slot.State = LobbySlotState.Active;
             return new LobbyStartResult(LobbyStartStatus.Success, slot.Number, credentials);
         }
-        catch
+        catch (Exception exception)
         {
             if (!resumed)
             {
@@ -340,7 +340,7 @@ public sealed class SessionCoordinator : IDisposable
                 Clear(slot);
             }
 
-            return new LobbyStartResult(LobbyStartStatus.ControllerCreateFailed);
+            return new LobbyStartResult(LobbyStartStatus.ControllerCreateFailed, FailureDetail: exception.Message);
         }
     }
 
@@ -400,9 +400,10 @@ public sealed class SessionCoordinator : IDisposable
         return new SessionCredentials(sessionId, RandomNumberGenerator.GetBytes(16), RandomNumberGenerator.GetBytes(32));
     }
 
-    private sealed class Slot(int number)
+    private sealed class Slot(int number, ControllerKind controllerKind)
     {
         public int Number { get; } = number;
+        public ControllerKind ControllerKind { get; } = controllerKind;
         public LobbySlotState State { get; set; }
         public VirtualController? Controller { get; set; }
         public string? ClientId { get; set; }

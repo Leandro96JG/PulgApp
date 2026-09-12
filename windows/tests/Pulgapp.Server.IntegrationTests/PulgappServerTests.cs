@@ -81,7 +81,7 @@ public sealed class PulgappServerTests
     }
 
     [Fact]
-    public async Task DashboardStatusTracksFourSlotsAndSelectiveAdministrativeActions()
+    public async Task DashboardStatusTracksEightTypedSlotsAndSelectiveAdministrativeActions()
     {
         var factory = new FakeControllerFactory();
         await using var server = new PulgappServer(
@@ -92,7 +92,8 @@ public sealed class PulgappServerTests
         var initial = await server.GetStatusAsync();
         Assert.True(initial.IsRunning);
         Assert.Equal("482913", initial.Pin);
-        Assert.Equal([1, 2, 3, 4], initial.Slots.Select(slot => slot.Slot));
+        Assert.Equal(Enumerable.Range(1, 8), initial.Slots.Select(slot => slot.Slot));
+        Assert.Equal(["Xbox 360", "Xbox 360", "Xbox 360", "Xbox 360", "DualShock 4", "DualShock 4", "DualShock 4", "DualShock 4"], initial.Slots.Select(slot => slot.ControllerType));
         Assert.All(initial.Slots, slot =>
         {
             Assert.Equal(LobbySlotState.Free, slot.State);
@@ -108,7 +109,7 @@ public sealed class PulgappServerTests
         using var udp = new UdpClient();
         try
         {
-            for (var slot = 1; slot <= 4; slot++)
+            for (var slot = 1; slot <= 8; slot++)
             {
                 var socket = new ClientWebSocket();
                 await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{GetTcpPort(server)}/control"), CancellationToken.None);
@@ -124,10 +125,10 @@ public sealed class PulgappServerTests
             }
 
             var connected = await server.GetStatusAsync();
-            Assert.Equal([1, 2, 3, 4], connected.Slots.Select(slot => slot.Slot));
+            Assert.Equal(Enumerable.Range(1, 8), connected.Slots.Select(slot => slot.Slot));
             Assert.All(connected.Slots, slot =>
             {
-                Assert.Equal("Xbox 360", slot.ControllerType);
+                Assert.Equal(slot.Slot <= 4 ? "Xbox 360" : "DualShock 4", slot.ControllerType);
                 Assert.Equal("Input ready", slot.ConnectionState);
                 Assert.StartsWith("Dashboard Phone ", slot.ClientName);
                 Assert.Equal("127.0.0.1", slot.SourceIpAddress);
@@ -171,7 +172,7 @@ public sealed class PulgappServerTests
     }
 
     [Fact]
-    public async Task Four_clients_get_independent_slots_and_fifth_is_full()
+    public async Task Eight_clients_get_fixed_type_slots_and_ninth_is_full()
     {
         var factory = new FakeControllerFactory();
         await using var server = new PulgappServer(new PulgappServerOptions(FindAvailablePort(), 0, "482913"), new SessionCoordinator(factory, TimeProvider.System));
@@ -181,7 +182,7 @@ public sealed class PulgappServerTests
         var welcomes = new List<JsonDocument>();
         try
         {
-            for (var slot = 1; slot <= 4; slot++)
+            for (var slot = 1; slot <= 8; slot++)
             {
                 var socket = new ClientWebSocket();
                 await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/control"), CancellationToken.None);
@@ -192,13 +193,14 @@ public sealed class PulgappServerTests
                 welcomes.Add(welcome);
             }
 
-            using var fifth = new ClientWebSocket();
-            await fifth.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/control"), CancellationToken.None);
-            await SendJsonAsync(fifth, Hello("00000000-0000-0000-0000-000000000005"));
-            using var full = await ReceiveJsonAsync(fifth);
+            using var ninth = new ClientWebSocket();
+            await ninth.ConnectAsync(new Uri($"ws://127.0.0.1:{port}/control"), CancellationToken.None);
+            await SendJsonAsync(ninth, Hello("00000000-0000-0000-0000-000000000009"));
+            using var full = await ReceiveJsonAsync(ninth);
             Assert.Equal("server_full", full.RootElement.GetProperty("code").GetString());
 
-            Assert.Equal(4, factory.CreateCount);
+            Assert.Equal(8, factory.CreateCount);
+            Assert.Equal([ControllerKind.X360, ControllerKind.X360, ControllerKind.X360, ControllerKind.X360, ControllerKind.Ds4, ControllerKind.Ds4, ControllerKind.Ds4, ControllerKind.Ds4], factory.Controllers.Select(controller => controller.Kind));
         }
         finally
         {
@@ -285,19 +287,18 @@ public sealed class PulgappServerTests
 
         public VirtualController Create(ControllerKind kind)
         {
-            Assert.Equal(ControllerKind.X360, kind);
             CreateCount++;
-            var controller = new FakeController();
+            var controller = new FakeController(kind);
             Controllers.Add(controller);
             return controller;
         }
     }
 
-    private sealed class FakeController : VirtualController
+    private sealed class FakeController(ControllerKind kind) : VirtualController
     {
         public List<GamepadState> AppliedStates { get; } = [];
 
-        public ControllerKind Kind => ControllerKind.X360;
+        public ControllerKind Kind { get; } = kind;
 
         public void Connect() { }
 

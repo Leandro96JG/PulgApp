@@ -1,11 +1,13 @@
 package com.example.pulgapp_mobile
 
 import android.os.Bundle
+import android.net.wifi.WifiManager
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var multicastLock: WifiManager.MulticastLock? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val preferences = getSharedPreferences("pulgapp", MODE_PRIVATE)
@@ -30,6 +32,14 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "enable" -> { window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); result.success(null) }
                     "disable" -> { window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); result.success(null) }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "pulgapp/multicast")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "acquire" -> { val wifi = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager; multicastLock = wifi.createMulticastLock("pulgapp-discovery").apply { setReferenceCounted(false); acquire() }; result.success(null) }
+                    "release" -> { multicastLock?.takeIf { it.isHeld }?.release(); multicastLock = null; result.success(null) }
                     else -> result.notImplemented()
                 }
             }

@@ -29,10 +29,11 @@ dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x
 Run these Dart/Flutter client commands from `mobile/`:
 
 ```powershell
-dart pub get
+flutter pub get
 dart test test/protocol_test.dart
-dart analyze
-dart test
+flutter analyze --no-pub
+flutter test test/controller_layout_test.dart --no-pub
+flutter test --no-pub
 flutter build apk --debug --no-pub
 ```
 

@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'client_preferences.dart';
+import 'controller/profile_manager_page.dart';
+import 'controller_profile.dart';
 import 'controller_connection.dart';
 import 'gamepad_input_model.dart';
-import 'gamepad_state.dart';
+import 'controller/touch_controller.dart';
+import 'server_discovery.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +49,11 @@ final class _ConnectPageState extends State<ConnectPage> {
   late final TextEditingController _endpoint;
   final _pin = TextEditingController();
   String? _error;
+  String? _endpointError;
+  String? _pinError;
   bool _connecting = false;
+  bool _discovering = false;
+  late ControllerProfileLibrary _profiles;
 
   @override
   void initState() {
@@ -54,6 +61,7 @@ final class _ConnectPageState extends State<ConnectPage> {
     _endpoint = TextEditingController(
       text: widget.preferences.lastEndpoint ?? '',
     );
+    _profiles = widget.preferences.controllerProfiles;
   }
 
   @override
@@ -64,8 +72,20 @@ final class _ConnectPageState extends State<ConnectPage> {
   }
 
   Future<void> _connect() async {
+    final endpointError = _validateEndpoint(_endpoint.text);
+    final pinError = _validatePin(_pin.text);
+    if (endpointError != null || pinError != null) {
+      setState(() {
+        _endpointError = endpointError;
+        _pinError = pinError;
+        _error = null;
+      });
+      return;
+    }
     setState(() {
       _error = null;
+      _endpointError = null;
+      _pinError = null;
       _connecting = true;
     });
     final connection = ControllerConnection(
@@ -78,80 +98,372 @@ final class _ConnectPageState extends State<ConnectPage> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => ControllerPage(connection: connection),
+          builder: (_) => ControllerPage(
+            connection: connection,
+            profile: _profiles.selected,
+          ),
         ),
       );
     } catch (error) {
       await connection.dispose();
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) _showConnectionError(error);
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 440),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'PULGAPP',
-                  style: Theme.of(context).textTheme.displaySmall,
-                ),
-                const SizedBox(height: 8),
-                const Text('Manual LAN pairing for one Xbox controller.'),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: _endpoint,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'Windows IPv4 address or hostname',
-                    hintText: '192.168.1.42',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _pin,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  decoration: const InputDecoration(labelText: 'Six-digit PIN'),
-                ),
-                if (_error case final error?) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    error,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _connecting ? null : _connect,
-                  child: Text(_connecting ? 'CONNECTING...' : 'CONNECT'),
-                ),
-              ],
-            ),
-          ),
+  Future<void> _discover() async {
+    setState(() {
+      _discovering = true;
+      _error = null;
+      _endpointError = null;
+    });
+    try {
+      final servers = await ServerDiscovery.find();
+      if (!mounted) return;
+      if (servers.isEmpty) {
+        setState(
+          () => _error = 'No servers found. Enter the IPv4 address manually.',
+        );
+        return;
+      }
+      setState(() {
+        _endpoint.text = servers.first.host;
+        _endpointError = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Server search failed. Check Wi-Fi and enter the address manually.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _discovering = false);
+    }
+  }
+
+  Future<void> _manageProfiles() async {
+    final result = await Navigator.of(context).push<ControllerProfileLibrary>(
+      MaterialPageRoute(
+        builder: (_) => ProfileManagerPage(
+          preferences: widget.preferences,
+          initialProfiles: _profiles,
         ),
       ),
+    );
+    if (mounted && result != null) setState(() => _profiles = result);
+  }
+
+  String? _validateEndpoint(String value) {
+    final host = value.trim().replaceFirst(RegExp(r'^https?://'), '');
+    if (host.isEmpty || host.contains('/') || host.contains(':')) {
+      return 'Enter an IPv4 address or hostname.';
+    }
+    return null;
+  }
+
+  String? _validatePin(String value) =>
+      RegExp(r'^\d{6}$').hasMatch(value) ? null : 'Enter the six-digit PIN.';
+
+  void _showConnectionError(Object error) {
+    final detail = error.toString().toLowerCase();
+    setState(() {
+      if (detail.contains('pin')) {
+        _pinError = 'The server rejected this PIN.';
+        _error = null;
+      } else if (detail.contains('socket') ||
+          detail.contains('host') ||
+          detail.contains('timed out') ||
+          detail.contains('connection refused')) {
+        _endpointError = 'Could not reach this server on the local network.';
+        _error = null;
+      } else if (detail.contains('virtual controller')) {
+        _error =
+            'Windows could not create the controller. Check the PC driver and try again.';
+      } else {
+        _error = 'Connection failed. Check the server and try again.';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    resizeToAvoidBottomInset: true,
+    body: SafeArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final landscapeForm = constraints.maxWidth >= 560;
+          final compact = constraints.maxHeight < 420;
+          final horizontalPadding = landscapeForm ? 20.0 : 16.0;
+          final verticalPadding = compact ? 12.0 : 24.0;
+          final endpointField = TextField(
+            key: const ValueKey('endpoint-field'),
+            controller: _endpoint,
+            autocorrect: false,
+            enableSuggestions: false,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) {
+              if (_endpointError != null || _error != null) {
+                setState(() {
+                  _endpointError = null;
+                  _error = null;
+                });
+              }
+            },
+            decoration: _fieldDecoration(
+              context,
+              label: 'Windows IP or hostname',
+              hint: '192.168.1.42',
+              icon: Icons.lan_outlined,
+              error: _endpointError,
+              compact: compact,
+            ),
+          );
+          final pinField = TextField(
+            key: const ValueKey('pin-field'),
+            controller: _pin,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            maxLength: 6,
+            onSubmitted: (_) {
+              if (!_connecting) _connect();
+            },
+            onChanged: (_) {
+              if (_pinError != null || _error != null) {
+                setState(() {
+                  _pinError = null;
+                  _error = null;
+                });
+              }
+            },
+            decoration: _fieldDecoration(
+              context,
+              label: 'Six-digit PIN',
+              hint: '000000',
+              icon: Icons.dialpad_rounded,
+              error: _pinError,
+              compact: compact,
+            ).copyWith(counterText: ''),
+          );
+          return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              verticalPadding,
+              horizontalPadding,
+              verticalPadding + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - verticalPadding * 2,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  key: const ValueKey('pairing-panel'),
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: compact ? 40 : 48,
+                            height: compact ? 40 : 48,
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Icon(Icons.sports_esports_rounded),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PULGAPP',
+                                  style: compact
+                                      ? Theme.of(context).textTheme.titleLarge
+                                      : Theme.of(
+                                          context,
+                                        ).textTheme.headlineMedium,
+                                ),
+                                Text(
+                                  'Pair over your local Wi-Fi',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: compact ? 10 : 18),
+                      OutlinedButton.icon(
+                        onPressed: _connecting ? null : _manageProfiles,
+                        icon: const Icon(Icons.tune),
+                        label: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'CONTROLS: ${_profiles.selected.name.toUpperCase()}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    _profiles.selected.buttons.visibleSummary,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.labelSmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right_rounded),
+                          ],
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 9,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: compact ? 10 : 18),
+                      if (landscapeForm)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: endpointField),
+                            const SizedBox(width: 12),
+                            Expanded(child: pinField),
+                          ],
+                        )
+                      else ...[
+                        endpointField,
+                        const SizedBox(height: 12),
+                        pinField,
+                      ],
+                      if (_error case final error?) ...[
+                        const SizedBox(height: 10),
+                        Semantics(
+                          liveRegion: true,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.errorContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.error_outline_rounded,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onErrorContainer,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    error,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onErrorContainer,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      SizedBox(height: compact ? 10 : 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _discovering ? null : _discover,
+                              icon: const Icon(Icons.radar_rounded),
+                              label: Text(
+                                _discovering ? 'SEARCHING…' : 'FIND SERVER',
+                              ),
+                              style: _actionStyle,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _connecting ? null : _connect,
+                              icon: const Icon(Icons.link_rounded),
+                              label: Text(
+                                _connecting ? 'CONNECTING…' : 'CONNECT',
+                              ),
+                              style: _actionStyle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+
+  InputDecoration _fieldDecoration(
+    BuildContext context, {
+    required String label,
+    required String hint,
+    required IconData icon,
+    required String? error,
+    required bool compact,
+  }) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    errorText: error,
+    prefixIcon: Icon(icon),
+    filled: true,
+    isDense: compact,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+  );
+
+  ButtonStyle get _actionStyle => ButtonStyle(
+    minimumSize: const WidgetStatePropertyAll(Size.fromHeight(52)),
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
   );
 }
 
 final class ControllerPage extends StatefulWidget {
-  const ControllerPage({super.key, required this.connection});
+  const ControllerPage({
+    super.key,
+    required this.connection,
+    this.profile = ControllerProfile.fallback,
+  });
   final ControllerConnection connection;
+  final ControllerProfile profile;
 
   @override
   State<ControllerPage> createState() => _ControllerPageState();
@@ -180,6 +492,8 @@ final class _ControllerPageState extends State<ControllerPage>
         state == AppLifecycleState.paused) {
       _input.cancelAll();
       unawaited(widget.connection.suspend());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(widget.connection.resume());
     }
   }
 
@@ -199,304 +513,16 @@ final class _ControllerPageState extends State<ControllerPage>
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
-      child: AnimatedBuilder(
-        animation: _input,
-        builder: (context, _) => Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            _Trigger(
-                              label: 'LT',
-                              left: true,
-                              model: _input,
-                              value: _input.state.leftTrigger,
-                            ),
-                            const SizedBox(width: 8),
-                            _Button(
-                              label: 'LB',
-                              bit: GamepadButton.lb,
-                              model: _input,
-                            ),
-                            const Spacer(),
-                            _Button(
-                              label: 'RB',
-                              bit: GamepadButton.rb,
-                              model: _input,
-                            ),
-                            const SizedBox(width: 8),
-                            _Trigger(
-                              label: 'RT',
-                              left: false,
-                              model: _input,
-                              value: _input.state.rightTrigger,
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        _Dpad(model: _input),
-                        const Spacer(),
-                        _Stick(left: true, model: _input),
-                        const SizedBox(height: 8),
-                        _Button(
-                          label: 'L3',
-                          bit: GamepadButton.l3,
-                          model: _input,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _Button(
-                              label: 'BACK',
-                              bit: GamepadButton.back,
-                              model: _input,
-                            ),
-                            const SizedBox(width: 8),
-                            _Button(
-                              label: 'START',
-                              bit: GamepadButton.start,
-                              model: _input,
-                            ),
-                            const SizedBox(width: 8),
-                            _Button(
-                              label: 'GUIDE',
-                              bit: GamepadButton.guide,
-                              model: _input,
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        _FaceButtons(model: _input),
-                        const Spacer(),
-                        _Stick(left: false, model: _input),
-                        const SizedBox(height: 8),
-                        _Button(
-                          label: 'R3',
-                          bit: GamepadButton.r3,
-                          model: _input,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: 8,
-              left: 0,
-              right: 0,
-              child: Text(
-                _connectionState == PulgappConnectionState.inputUnavailable
-                    ? 'UDP unavailable: check Wi-Fi and firewall'
-                    : 'Slot ${widget.connection.welcome?.slot ?? '-'} | ${_connectionState.name}',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
+      child: TouchController(
+        model: _input,
+        stickSettings: widget.profile.sticks,
+        buttonMapping: widget.profile.buttons,
+        layoutSettings: widget.profile.layout,
+        enabled: _connectionState == PulgappConnectionState.connected,
+        status: _connectionState == PulgappConnectionState.inputUnavailable
+            ? 'UDP unavailable: check Wi-Fi and firewall'
+            : 'Slot ${widget.connection.welcome?.slot ?? '-'} | ${_connectionState.name}',
       ),
-    ),
-  );
-}
-
-final class _Stick extends StatelessWidget {
-  const _Stick({required this.left, required this.model});
-  final bool left;
-  final GamepadInputModel model;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: 96,
-    child: LayoutBuilder(
-      builder: (context, constraints) => Listener(
-        onPointerDown: (event) => _update(event, constraints.biggest),
-        onPointerMove: (event) => _update(event, constraints.biggest),
-        onPointerUp: (event) => model.releasePointer(event.pointer),
-        onPointerCancel: (event) => model.releasePointer(event.pointer),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: .12),
-          ),
-          child: Center(child: Text(left ? 'LS' : 'RS')),
-        ),
-      ),
-    ),
-  );
-
-  void _update(PointerEvent event, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final delta = event.localPosition - center;
-    model.updateStick(
-      pointer: event.pointer,
-      left: left,
-      x: delta.dx / center.dx,
-      y: delta.dy / center.dy,
-    );
-  }
-}
-
-final class _Trigger extends StatelessWidget {
-  const _Trigger({
-    required this.label,
-    required this.left,
-    required this.model,
-    required this.value,
-  });
-  final String label;
-  final bool left;
-  final GamepadInputModel model;
-  final int value;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 64,
-    height: 42,
-    child: LayoutBuilder(
-      builder: (context, constraints) => Listener(
-        onPointerDown: (event) => _update(event, constraints.maxHeight),
-        onPointerMove: (event) => _update(event, constraints.maxHeight),
-        onPointerUp: (event) => model.releasePointer(event.pointer),
-        onPointerCancel: (event) => model.releasePointer(event.pointer),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: value / 131070),
-          ),
-          child: Center(child: Text(label)),
-        ),
-      ),
-    ),
-  );
-
-  void _update(PointerEvent event, double height) => model.updateTrigger(
-    pointer: event.pointer,
-    left: left,
-    amount: 1 - (event.localPosition.dy / height),
-  );
-}
-
-final class _Button extends StatelessWidget {
-  const _Button({required this.label, required this.bit, required this.model});
-  final String label;
-  final int bit;
-  final GamepadInputModel model;
-
-  @override
-  Widget build(BuildContext context) {
-    final pressed = model.state.buttons & bit != 0;
-    return Listener(
-      onPointerDown: (event) => model.pressButton(event.pointer, bit),
-      onPointerUp: (event) => model.releasePointer(event.pointer),
-      onPointerCancel: (event) => model.releasePointer(event.pointer),
-      child: Container(
-        width: 46,
-        height: 46,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: pressed
-              ? Theme.of(context).colorScheme.primary
-              : Colors.white.withValues(alpha: .12),
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-}
-
-final class _FaceButtons extends StatelessWidget {
-  const _FaceButtons({required this.model});
-  final GamepadInputModel model;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 120,
-    height: 120,
-    child: Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 37,
-          child: _Button(label: 'Y', bit: GamepadButton.y, model: model),
-        ),
-        Positioned(
-          bottom: 0,
-          left: 37,
-          child: _Button(label: 'A', bit: GamepadButton.a, model: model),
-        ),
-        Positioned(
-          top: 37,
-          left: 0,
-          child: _Button(label: 'X', bit: GamepadButton.x, model: model),
-        ),
-        Positioned(
-          top: 37,
-          right: 0,
-          child: _Button(label: 'B', bit: GamepadButton.b, model: model),
-        ),
-      ],
-    ),
-  );
-}
-
-final class _Dpad extends StatelessWidget {
-  const _Dpad({required this.model});
-  final GamepadInputModel model;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 120,
-    height: 120,
-    child: Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 37,
-          child: _Button(label: 'UP', bit: GamepadButton.dpadUp, model: model),
-        ),
-        Positioned(
-          bottom: 0,
-          left: 37,
-          child: _Button(
-            label: 'DN',
-            bit: GamepadButton.dpadDown,
-            model: model,
-          ),
-        ),
-        Positioned(
-          top: 37,
-          left: 0,
-          child: _Button(
-            label: 'LT',
-            bit: GamepadButton.dpadLeft,
-            model: model,
-          ),
-        ),
-        Positioned(
-          top: 37,
-          right: 0,
-          child: _Button(
-            label: 'RT',
-            bit: GamepadButton.dpadRight,
-            model: model,
-          ),
-        ),
-      ],
     ),
   );
 }

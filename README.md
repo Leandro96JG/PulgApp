@@ -29,3 +29,4 @@ For another coding agent, use the prompt in `docs/ai-handoff.md`.
 | `docs/acceptance.md` | Required evidence for each phase |
 | `docs/compatibility-test.md` | Manual ViGEm/game gate procedure |
 | `docs/development.md` | Toolchain prerequisites and test separation |
+| `docs/controller-layout-plan.md` | Planned ergonomic mobile controller redesign |

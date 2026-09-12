@@ -28,14 +28,16 @@ public sealed class SessionCoordinatorTests
     }
 
     [Fact]
-    public void New_sessions_fill_four_slots_and_reject_fifth_and_duplicate_client()
+    public void New_sessions_fill_four_x360_then_four_ds4_slots_and_reject_ninth_and_duplicate_client()
     {
-        var coordinator = CreateCoordinator(new FakeFactory(), out _);
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
 
-        var sessions = Enumerable.Range(1, 4).Select(number => coordinator.StartNew($"client-{number}")).ToArray();
+        var sessions = Enumerable.Range(1, 8).Select(number => coordinator.StartNew($"client-{number}")).ToArray();
 
-        Assert.Equal([1, 2, 3, 4], sessions.Select(result => result.Slot));
-        Assert.Equal(LobbyStartStatus.ServerFull, coordinator.StartNew("client-5").Status);
+        Assert.Equal(Enumerable.Range(1, 8), sessions.Select(result => result.Slot!.Value));
+        Assert.Equal([ControllerKind.X360, ControllerKind.X360, ControllerKind.X360, ControllerKind.X360, ControllerKind.Ds4, ControllerKind.Ds4, ControllerKind.Ds4, ControllerKind.Ds4], factory.Controllers.Select(controller => controller.Kind));
+        Assert.Equal(LobbyStartStatus.ServerFull, coordinator.StartNew("client-9").Status);
         Assert.Equal(LobbyStartStatus.ClientAlreadyConnected, coordinator.StartNew("client-1").Status);
     }
 
@@ -150,7 +152,6 @@ public sealed class SessionCoordinatorTests
 
         public VirtualController Create(ControllerKind kind)
         {
-            Assert.Equal(ControllerKind.X360, kind);
             var controller = new FakeController(kind, FailNextConnect);
             FailNextConnect = false;
             Controllers.Add(controller);

@@ -61,6 +61,7 @@ public sealed class PulgappServer : IAsyncDisposable
     private Task? _watchdogTask;
     private bool _acceptingConnections;
     private readonly Dictionary<ulong, ControlConnection> _connections = [];
+    private readonly PulgappMdnsAdvertiser _mdnsAdvertiser = new();
 
     public PulgappServer(PulgappServerOptions options, SessionCoordinator coordinator)
     {
@@ -100,6 +101,7 @@ public sealed class PulgappServer : IAsyncDisposable
         _application.MapGet("/health", () => Results.Json(new { status = "ok" }));
         _application.Map("/control", HandleControlAsync);
         await _application.StartAsync(_stopping.Token);
+        _mdnsAdvertiser.Start(_options.ServerName, TcpPort, _serverId, GetLanIpv4Addresses());
         _acceptingConnections = true;
         _udpTask = ReceiveUdpAsync(_stopping.Token);
         _watchdogTask = WatchInputTimeoutAsync(_stopping.Token);
@@ -207,6 +209,7 @@ public sealed class PulgappServer : IAsyncDisposable
         }
 
         stopping.Cancel();
+        _mdnsAdvertiser.Stop();
         _udpClient?.Dispose();
         if (_application is not null)
         {
@@ -227,6 +230,7 @@ public sealed class PulgappServer : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
+        _mdnsAdvertiser.Dispose();
         _stateLock.Dispose();
         _sendLock.Dispose();
     }
@@ -285,10 +289,10 @@ public sealed class PulgappServer : IAsyncDisposable
             {
                 var (code, message, closeStatus) = start.Status switch
                 {
-                    LobbyStartStatus.ServerFull => ("server_full", "All X360 slots are occupied.", (WebSocketCloseStatus)1013),
+                    LobbyStartStatus.ServerFull => ("server_full", "All controller slots are occupied.", (WebSocketCloseStatus)1013),
                     LobbyStartStatus.ClientAlreadyConnected => ("client_already_connected", "This client is already connected or reserved.", WebSocketCloseStatus.PolicyViolation),
                     LobbyStartStatus.ResumeRejected => ("resume_rejected", "The resume token is invalid or expired.", WebSocketCloseStatus.PolicyViolation),
-                    _ => ("controller_create_failed", "The virtual controller could not be created.", WebSocketCloseStatus.InternalServerError),
+                    _ => ("controller_create_failed", start.FailureDetail ?? "The virtual controller could not be created.", WebSocketCloseStatus.InternalServerError),
                 };
                 await SendAndCloseAsync(socket, new ErrorMessage(1, "error", code, message, true), closeStatus, context.RequestAborted);
                 return;
@@ -546,6 +550,12 @@ public sealed class PulgappServer : IAsyncDisposable
 
     private static string MonotonicMicroseconds() => ((Stopwatch.GetTimestamp() * 1_000_000L) / Stopwatch.Frequency).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    private static IEnumerable<IPAddress> GetLanIpv4Addresses() => System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+        .Where(network => network.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up && network.NetworkInterfaceType is not System.Net.NetworkInformation.NetworkInterfaceType.Loopback and not System.Net.NetworkInformation.NetworkInterfaceType.Tunnel)
+        .SelectMany(network => network.GetIPProperties().UnicastAddresses)
+        .Where(unicast => unicast.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(unicast.Address) && !unicast.Address.ToString().StartsWith("172.", StringComparison.Ordinal))
+        .Select(unicast => unicast.Address);
+
     private PulgappSlotStatus CreateSlotStatus(LobbySlotStatus slot, DateTimeOffset now)
     {
         var connection = _connections.Values.SingleOrDefault(connection => connection.Slot == slot.Slot);
@@ -563,7 +573,7 @@ public sealed class PulgappServer : IAsyncDisposable
             };
         return new PulgappSlotStatus(
             slot.Slot,
-            "Xbox 360",
+            slot.ControllerKind == ControllerKind.X360 ? "Xbox 360" : "DualShock 4",
             slot.State,
             connection?.ClientName ?? (slot.State == LobbySlotState.Reserved ? "Reserved client" : "No client connected"),
             connection?.Address.ToString() ?? "-",

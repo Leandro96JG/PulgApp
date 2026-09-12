@@ -12,6 +12,7 @@ enum PulgappConnectionState {
   connecting,
   connected,
   inputUnavailable,
+  reconnecting,
   error,
 }
 
@@ -43,14 +44,49 @@ final class ControllerConnection {
   bool _closing = false;
   PulgappConnectionState _state = PulgappConnectionState.disconnected;
   String? _error;
+  String? _resumeEndpoint;
+  String? _resumeToken;
+  bool _recovering = false;
 
   Stream<PulgappConnectionState> get states => _states.stream;
   PulgappConnectionState get state => _state;
   String? get error => _error;
   WelcomeMessage? get welcome => _welcome;
 
-  Future<void> connect({required String endpoint, required String pin}) async {
-    if (!RegExp(r'^\d{6}$').hasMatch(pin)) {
+  Future<void> connect({required String endpoint, required String pin}) async => _connect(endpoint: endpoint, pin: pin);
+
+  Future<void> resume() async {
+    final endpoint = _resumeEndpoint;
+    final token = _resumeToken;
+    if (endpoint == null || token == null) return;
+    await _connect(endpoint: endpoint, resumeToken: token);
+  }
+
+  Future<void> _recover() async {
+    if (_recovering || _resumeEndpoint == null || _resumeToken == null) return;
+    _recovering = true;
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    try {
+      for (final delay in const [Duration(milliseconds: 250), Duration(milliseconds: 500), Duration(seconds: 1), Duration(seconds: 2)]) {
+        while (DateTime.now().isBefore(deadline)) {
+          _setState(PulgappConnectionState.reconnecting);
+          await Future<void>.delayed(delay);
+          try {
+            await resume();
+            return;
+          } catch (_) {
+            // Keep trying only while the server still holds the lease.
+          }
+          if (delay != const Duration(seconds: 2)) break;
+        }
+      }
+    } finally {
+      _recovering = false;
+    }
+  }
+
+  Future<void> _connect({required String endpoint, String? pin, String? resumeToken}) async {
+    if (pin != null && !RegExp(r'^\d{6}$').hasMatch(pin)) {
       throw ArgumentError.value(pin, 'pin', 'must be six decimal digits');
     }
     final host = _normalizeHost(endpoint);
@@ -80,10 +116,13 @@ final class ControllerConnection {
             appVersion: '0.1.0',
             capabilities: const ['udp_input_v1'],
             pin: pin,
+            resumeToken: resumeToken,
           ).toJson(),
         ),
       );
       _welcome = await welcome.future.timeout(const Duration(seconds: 10));
+      _resumeEndpoint = host;
+      _resumeToken = _welcome!.resumeToken;
       _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       _scheduler.start();
       _scheduler.sendNeutralNow();
@@ -114,6 +153,8 @@ final class ControllerConnection {
     await _scheduler.sendNeutralRedundantly();
     _webSocket?.add(jsonEncode(const LeaveMessage().toJson()));
     await _close(sendSuspend: false);
+    _resumeEndpoint = null;
+    _resumeToken = null;
   }
 
   Future<void> dispose() async {
@@ -209,7 +250,7 @@ final class ControllerConnection {
     _scheduler.sendNeutralNow();
     _error = 'Control connection closed.';
     _setState(PulgappConnectionState.disconnected);
-    _close(sendSuspend: false);
+    unawaited(_close(sendSuspend: false).then((_) => _recover()));
   }
 
   Future<void> _close({required bool sendSuspend}) async {

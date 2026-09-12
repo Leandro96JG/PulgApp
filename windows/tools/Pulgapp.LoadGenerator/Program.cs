@@ -131,10 +131,10 @@ internal static class LoopbackLoadRun
 
             var activeClients = clients.Where(client => client.IsAccepted).ToArray();
             var rejectedClients = clients.Where(client => !client.IsAccepted).ToArray();
-            var expectedActiveClients = Math.Min(options.Clients, 4);
+            var expectedActiveClients = Math.Min(options.Clients, 8);
             if (activeClients.Length != expectedActiveClients || rejectedClients.Any(client => client.ErrorCode != "server_full"))
             {
-                throw new InvalidOperationException("The server did not assign the expected X360 slots or reject excess clients as server_full.");
+                throw new InvalidOperationException("The server did not assign the expected controller slots or reject excess clients as server_full.");
             }
 
             if (activeClients.Select(client => client.Slot).OrderBy(slot => slot).SequenceEqual(Enumerable.Range(1, expectedActiveClients)) is false)
@@ -262,12 +262,7 @@ internal static class LoopbackLoadRun
 
         public VirtualController Create(ControllerKind kind)
         {
-            if (kind != ControllerKind.X360)
-            {
-                throw new InvalidOperationException("P2 loopback load only supports X360 slots.");
-            }
-
-            var controller = new RecordingController();
+            var controller = new RecordingController(kind);
             _controllers.Add(_controllers.Count + 1, controller);
             return controller;
         }
@@ -275,9 +270,9 @@ internal static class LoopbackLoadRun
         public bool TryGet(int slot, out RecordingController controller) => _controllers.TryGetValue(slot, out controller!);
     }
 
-    private sealed class RecordingController : VirtualController
+    private sealed class RecordingController(ControllerKind kind) : VirtualController
     {
-        public ControllerKind Kind => ControllerKind.X360;
+        public ControllerKind Kind { get; } = kind;
 
         public GamepadState LastAppliedState { get; private set; } = GamepadState.Neutral;
 
