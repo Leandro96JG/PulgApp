@@ -30,8 +30,8 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P5 - Product UX And Optional Feedback`
-- Next task: `P5-03` Add controller customization settings
-- Last completed task: `P5-02` Add versioned local controller profiles
+- Next task: `P5-04` Optional rumble forwarding or QR connection
+- Last completed task: `P5-03` Add controller customization settings
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 - Branch exception: On `codex/defer-g3-physical-validation`, the project owner authorized P4 work before the remaining G3 physical compatibility matrix and two-hour load run. G3 remains deferred and must not be reported as passed or used as release evidence.
@@ -450,7 +450,7 @@ Evidence (2026-08-31, user-reported manual verification):
 
 - [x] Implement and validate the fixed ergonomic controller layout in `docs/controller-layout-plan.md` after Gates G2-G4 pass.
 - [x] Add versioned local controller profiles without changing the wire protocol.
-- [ ] Add layout movement/sizing, button remapping, dead zones, sensitivity, and local haptics.
+- [x] Add layout movement/sizing, button remapping, dead zones, sensitivity, and local haptics.
 - [x] Design a touch-first layout with large, well-spaced buttons, clear grouping, and minimal visual status so the player can play without watching the phone screen.
 - [x] Validate the layout with multitouch, accidental touch prevention, landscape orientation, and small-phone safe areas.
 - [ ] Add optional rumble forwarding over WebSocket.
@@ -484,7 +484,8 @@ P5 controller-customization progress (2026-09-03):
 - Added PIN visibility toggle (with eye icon, visible by default) and discovered-servers bottom-sheet selector on 2026-09-12.
 - Added local haptic feedback on button presses, D-pad changes, and trigger activations on 2026-09-12.
 - Added floating visual joystick base ring centered dynamically at touch origin on 2026-09-12.
-- Branch `feature/ux-and-controls-improvements` created and pushed to GitHub; verified with `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (45/45 tests pass), and `flutter build apk --debug --no-pub`.
+- Added offline test pad (`ControllerTestPadPage`), digital trigger mode setting per profile, double-tap on sticks for L3/R3, and PIN pre-population and local persistence on 2026-09-12.
+- Branch `feature/ux-and-controls-improvements` pushed to GitHub; verified with `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (50/50 tests pass), `flutter build apk --debug --no-pub`, and Windows `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (39/39 tests pass).
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 
