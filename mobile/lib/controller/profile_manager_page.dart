@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../client_preferences.dart';
 import '../controller_profile.dart';
+import 'test_pad_page.dart';
 
 class ProfileManagerPage extends StatefulWidget {
   const ProfileManagerPage({
@@ -90,6 +91,14 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
     if (confirmed == true) await _apply(_profiles.remove(profile.id));
   }
 
+  Future<void> _testProfile(ControllerProfile profile) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ControllerTestPadPage(profile: profile),
+      ),
+    );
+  }
+
   Future<void> _configure(ControllerProfile profile) async {
     var settings = profile.sticks;
     final result = await showModalBottomSheet<ControllerStickSettings>(
@@ -108,7 +117,7 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
-                const Text('Stick response'),
+                const Text('Stick & trigger response'),
                 const SizedBox(height: 20),
                 _SettingSlider(
                   label: 'Dead zone',
@@ -121,6 +130,7 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                     () => settings = ControllerStickSettings(
                       deadZone: value,
                       sensitivity: settings.sensitivity,
+                      digitalTriggers: settings.digitalTriggers,
                     ),
                   ),
                 ),
@@ -135,6 +145,23 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                     () => settings = ControllerStickSettings(
                       deadZone: settings.deadZone,
                       sensitivity: value,
+                      digitalTriggers: settings.digitalTriggers,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Digital triggers (LT / RT)'),
+                  subtitle: const Text(
+                    'Instant 100% response on touch without vertical sliding',
+                  ),
+                  value: settings.digitalTriggers,
+                  onChanged: (value) => setSheetState(
+                    () => settings = ControllerStickSettings(
+                      deadZone: settings.deadZone,
+                      sensitivity: settings.sensitivity,
+                      digitalTriggers: value,
                     ),
                   ),
                 ),
@@ -378,6 +405,11 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
         title: const Text('Controller profiles'),
         actions: [
           IconButton(
+            tooltip: 'Test selected profile',
+            onPressed: () => _testProfile(_profiles.selected),
+            icon: const Icon(Icons.sports_esports_rounded),
+          ),
+          IconButton(
             tooltip: 'New profile',
             onPressed: _saving ? null : () => _editProfile(),
             icon: const Icon(Icons.add),
@@ -418,9 +450,14 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                               : 'Ready for your future control settings',
                         ),
                         secondary: profile.id == ControllerProfile.defaultId
-                            ? const Icon(Icons.lock_outline)
+                            ? IconButton(
+                                tooltip: 'Test controller',
+                                icon: const Icon(Icons.sports_esports_rounded),
+                                onPressed: () => _testProfile(profile),
+                              )
                             : PopupMenuButton<String>(
                                 onSelected: (action) {
+                                  if (action == 'test') _testProfile(profile);
                                   if (action == 'rename')
                                     _editProfile(profile: profile);
                                   if (action == 'delete') _delete(profile);
@@ -432,8 +469,12 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                                 },
                                 itemBuilder: (context) => const [
                                   PopupMenuItem(
+                                    value: 'test',
+                                    child: Text('Test controller'),
+                                  ),
+                                  PopupMenuItem(
                                     value: 'settings',
-                                    child: Text('Stick settings'),
+                                    child: Text('Stick & trigger settings'),
                                   ),
                                   PopupMenuItem(
                                     value: 'mapping',

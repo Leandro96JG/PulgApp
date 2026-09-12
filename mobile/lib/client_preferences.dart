@@ -9,6 +9,7 @@ final class ClientPreferences {
 
   static const _clientIdKey = 'client-id';
   static const _endpointKey = 'last-endpoint';
+  static const _pinKey = 'last-pin';
   static const _profilesKey = 'controller-profiles-v1';
   static const _channel = MethodChannel('pulgapp/preferences');
   final Map<String, String> _values;
@@ -44,6 +45,8 @@ final class ClientPreferences {
 
   String? get lastEndpoint => _values[_endpointKey];
 
+  String? get lastPin => _values[_pinKey];
+
   ControllerProfileLibrary get controllerProfiles =>
       ControllerProfileLibrary.decode(_values[_profilesKey]);
 
@@ -61,6 +64,14 @@ final class ClientPreferences {
     await _channel.invokeMethod<void>('setString', {
       'key': _endpointKey,
       'value': endpoint,
+    });
+  }
+
+  Future<void> savePin(String pin) async {
+    _values[_pinKey] = pin;
+    await _channel.invokeMethod<void>('setString', {
+      'key': _pinKey,
+      'value': pin,
     });
   }
 }

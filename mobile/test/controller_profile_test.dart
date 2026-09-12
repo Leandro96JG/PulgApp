@@ -121,4 +121,21 @@ void main() {
       );
     },
   );
+
+  test('digital triggers setting persists and defaults to false', () {
+    expect(ControllerStickSettings.defaults.digitalTriggers, isFalse);
+    const digitalSettings = ControllerStickSettings(
+      deadZone: .15,
+      sensitivity: 1.2,
+      digitalTriggers: true,
+    );
+    final profiles = ControllerProfileLibrary.initial()
+        .create(id: 'arcade', name: 'Arcade')
+        .updateStickSettings('arcade', digitalSettings)
+        .select('arcade');
+    final restored = ControllerProfileLibrary.decode(profiles.encode());
+    expect(restored.selected.sticks.digitalTriggers, isTrue);
+    expect(restored.selected.sticks.deadZone, .15);
+    expect(restored.selected.sticks.sensitivity, 1.2);
+  });
 }

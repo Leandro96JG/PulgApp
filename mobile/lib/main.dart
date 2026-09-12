@@ -47,7 +47,7 @@ final class ConnectPage extends StatefulWidget {
 
 final class _ConnectPageState extends State<ConnectPage> {
   late final TextEditingController _endpoint;
-  final _pin = TextEditingController();
+  late final TextEditingController _pin;
   bool _showPin = true;
   String? _error;
   String? _endpointError;
@@ -61,6 +61,9 @@ final class _ConnectPageState extends State<ConnectPage> {
     super.initState();
     _endpoint = TextEditingController(
       text: widget.preferences.lastEndpoint ?? '',
+    );
+    _pin = TextEditingController(
+      text: widget.preferences.lastPin ?? '',
     );
     _profiles = widget.preferences.controllerProfiles;
   }
@@ -96,6 +99,7 @@ final class _ConnectPageState extends State<ConnectPage> {
     );
     try {
       await connection.connect(endpoint: _endpoint.text, pin: _pin.text);
+      await widget.preferences.savePin(_pin.text);
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(

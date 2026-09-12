@@ -117,4 +117,17 @@ void main() {
     pinField = tester.widget<TextField>(pinFieldFinder);
     expect(pinField.obscureText, isTrue);
   });
+
+  testWidgets('pre-populates endpoint and PIN from preferences', (tester) async {
+    await _showConnectPage(
+      tester,
+      size: const Size(640, 320),
+      values: {
+        'last-endpoint': '192.168.1.50',
+        'last-pin': '654321',
+      },
+    );
+    expect(find.text('192.168.1.50'), findsOneWidget);
+    expect(find.text('654321'), findsOneWidget);
+  });
 }

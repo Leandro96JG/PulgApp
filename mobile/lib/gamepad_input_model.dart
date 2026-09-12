@@ -17,12 +17,13 @@ final class GamepadInputModel extends ChangeNotifier {
   }
 
   void releasePointer(int pointer) {
-    final removed = _buttonPointers.remove(pointer) != null;
-    _stickPointers.remove(pointer);
-    _triggerPointers.remove(pointer);
-    if (removed) {
+    final buttonRemoved = _buttonPointers.remove(pointer) != null;
+    final stickRemoved = _stickPointers.remove(pointer) != null;
+    final triggerRemoved = _triggerPointers.remove(pointer) != null;
+    if (buttonRemoved) {
       _updateButtons();
-    } else {
+    }
+    if (stickRemoved || triggerRemoved) {
       _updateAxes();
     }
   }

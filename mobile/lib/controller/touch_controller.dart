@@ -142,7 +142,11 @@ class _TouchControllerState extends State<TouchController>
                     child: Row(
                       children: [
                         Expanded(
-                          child: _Trigger(left: true, model: widget.model),
+                          child: _Trigger(
+                            left: true,
+                            model: widget.model,
+                            digital: widget.stickSettings.digitalTriggers,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(child: _button('LB')),
@@ -171,7 +175,11 @@ class _TouchControllerState extends State<TouchController>
                         Expanded(child: _button('RB')),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: _Trigger(left: false, model: widget.model),
+                          child: _Trigger(
+                            left: false,
+                            model: widget.model,
+                            digital: widget.stickSettings.digitalTriggers,
+                          ),
                         ),
                       ],
                     ),
@@ -318,11 +326,13 @@ class _GestureSurface extends StatefulWidget {
     required this.model,
     required this.onUpdate,
     required this.builder,
+    this.onPointerDown,
   });
   final String id;
   final GamepadInputModel model;
   final void Function(int pointer, Offset position, Offset origin, Size size)
   onUpdate;
+  final void Function(int pointer, Offset origin)? onPointerDown;
   final Widget Function(Size size, bool active, Offset origin) builder;
 
   @override
@@ -371,6 +381,7 @@ class _GestureSurfaceState extends State<_GestureSurface> {
               _pointer = event.pointer;
               _origin = event.localPosition;
             });
+            widget.onPointerDown?.call(event.pointer, event.localPosition);
             update(event);
           },
           onPointerMove: update,
@@ -391,7 +402,7 @@ class _GestureSurfaceState extends State<_GestureSurface> {
   );
 }
 
-class _Stick extends StatelessWidget {
+class _Stick extends StatefulWidget {
   const _Stick({
     required this.left,
     required this.model,
@@ -402,19 +413,46 @@ class _Stick extends StatelessWidget {
   final ControllerStickSettings settings;
 
   @override
+  State<_Stick> createState() => _StickState();
+}
+
+class _StickState extends State<_Stick> {
+  DateTime? _lastTapTime;
+  Offset? _lastTapOrigin;
+
+  void _handlePointerDown(int pointer, Offset origin) {
+    final now = DateTime.now();
+    if (_lastTapTime != null && _lastTapOrigin != null) {
+      final elapsed = now.difference(_lastTapTime!);
+      final distance = (origin - _lastTapOrigin!).distance;
+      if (elapsed < const Duration(milliseconds: 300) && distance < 60) {
+        final button = widget.left ? GamepadButton.l3 : GamepadButton.r3;
+        widget.model.pressButton(pointer, button);
+        HapticFeedback.mediumImpact();
+        _lastTapTime = null;
+        _lastTapOrigin = null;
+        return;
+      }
+    }
+    _lastTapTime = now;
+    _lastTapOrigin = origin;
+  }
+
+  @override
   Widget build(BuildContext context) => _GestureSurface(
-    id: left ? 'LS' : 'RS',
-    model: model,
+    id: widget.left ? 'LS' : 'RS',
+    model: widget.model,
+    onPointerDown: _handlePointerDown,
     onUpdate: (pointer, position, origin, size) {
       final radius = math.min(size.width, size.height) * .28;
       final delta = (position - origin) / radius;
       final distance = delta.distance;
       final clamped = distance == 0
           ? Offset.zero
-          : delta / distance * settings.mapMagnitude(distance);
-      model.updateStick(
+          : delta / distance * widget.settings.mapMagnitude(distance);
+      widget.model.updateStick(
         pointer: pointer,
-        left: left,
+        left: widget.left,
         x: clamped.dx,
         y: clamped.dy,
       );
@@ -422,8 +460,17 @@ class _Stick extends StatelessWidget {
     builder: (size, active, origin) {
       final diameter = math.min(size.width, size.height) * .80;
       final radius = diameter / 2;
-      final x = (left ? model.state.leftX : model.state.rightX) / 32767;
-      final y = -(left ? model.state.leftY : model.state.rightY) / 32767;
+      final x = (widget.left
+              ? widget.model.state.leftX
+              : widget.model.state.rightX) /
+          32767;
+      final y = -(widget.left
+              ? widget.model.state.leftY
+              : widget.model.state.rightY) /
+          32767;
+      final isClickActive = widget.model.state.buttons &
+              (widget.left ? GamepadButton.l3 : GamepadButton.r3) !=
+          0;
       final center = active
           ? Offset(
               origin.dx.clamp(radius, size.width - radius),
@@ -440,7 +487,10 @@ class _Stick extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: _outline, width: 2),
+                border: Border.all(
+                  color: isClickActive ? _accent : _outline,
+                  width: isClickActive ? 3 : 2,
+                ),
               ),
               child: Center(
                 child: Transform.translate(
@@ -451,18 +501,22 @@ class _Stick extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: active ? _accent : _control,
+                      color: isClickActive
+                          ? _accent
+                          : (active ? _accent : _control),
                       border: Border.all(
                         color: _accent.withValues(alpha: .6),
                         width: 2,
                       ),
                     ),
                     child: Text(
-                      left ? 'LS' : 'RS',
+                      isClickActive
+                          ? (widget.left ? 'L3' : 'R3')
+                          : (widget.left ? 'LS' : 'RS'),
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: active ? _surface : _ink,
+                        color: (active || isClickActive) ? _surface : _ink,
                       ),
                     ),
                   ),
@@ -553,9 +607,14 @@ class _Dpad extends StatelessWidget {
 }
 
 class _Trigger extends StatelessWidget {
-  const _Trigger({required this.left, required this.model});
+  const _Trigger({
+    required this.left,
+    required this.model,
+    this.digital = false,
+  });
   final bool left;
   final GamepadInputModel model;
+  final bool digital;
 
   @override
   Widget build(BuildContext context) => _GestureSurface(
@@ -563,7 +622,7 @@ class _Trigger extends StatelessWidget {
     model: model,
     onUpdate: (pointer, position, origin, size) {
       final prev = left ? model.state.leftTrigger : model.state.rightTrigger;
-      final amount = 1 - position.dy / size.height;
+      final amount = digital ? 1.0 : (1 - position.dy / size.height);
       if (prev == 0 && amount > 0) {
         HapticFeedback.selectionClick();
       }

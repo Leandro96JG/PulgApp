@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulgapp_mobile/controller_connection.dart';
 import 'package:pulgapp_mobile/main.dart';
+import 'package:pulgapp_mobile/controller/test_pad_page.dart';
 import 'package:pulgapp_mobile/controller/touch_controller.dart';
 import 'package:pulgapp_mobile/controller_profile.dart';
 import 'package:pulgapp_mobile/gamepad_input_model.dart';
@@ -39,6 +40,7 @@ Future<void> showController(
   Size size = const Size(740, 360),
   double scale = 1,
   bool enabled = true,
+  ControllerStickSettings stickSettings = ControllerStickSettings.defaults,
   ControllerButtonMapping buttonMapping = ControllerButtonMapping.identity,
   ControllerLayoutSettings layoutSettings = ControllerLayoutSettings.defaults,
 }) async {
@@ -62,6 +64,7 @@ Future<void> showController(
                 model: model,
                 enabled: enabled,
                 status: 'Slot 1 | connected',
+                stickSettings: stickSettings,
                 buttonMapping: buttonMapping,
                 layoutSettings: layoutSettings,
               ),
@@ -434,5 +437,66 @@ void main() {
       ).writeAsBytes(bytes!.buffer.asUint8List());
       preview.dispose();
     });
+  });
+
+  testWidgets('digital triggers instantly jump to 100% and release to 0', (
+    tester,
+  ) async {
+    final model = GamepadInputModel();
+    await showController(
+      tester,
+      model,
+      stickSettings: const ControllerStickSettings(digitalTriggers: true),
+    );
+    final lt = await tester.startGesture(tester.getCenter(control('LT')));
+    expect(model.state.leftTrigger, 65535);
+    await lt.up();
+    expect(model.state.leftTrigger, 0);
+
+    final rt = await tester.startGesture(tester.getCenter(control('RT')));
+    expect(model.state.rightTrigger, 65535);
+    await rt.up();
+    expect(model.state.rightTrigger, 0);
+  });
+
+  testWidgets('double-tap on stick triggers stick click and releases cleanly', (
+    tester,
+  ) async {
+    final model = GamepadInputModel();
+    await showController(tester, model);
+    final center = tester.getCenter(control('LS'));
+    final tap1 = await tester.startGesture(center);
+    await tap1.up();
+    expect(model.state.buttons & GamepadButton.l3, 0);
+
+    final tap2 = await tester.startGesture(center);
+    expect(model.state.buttons & GamepadButton.l3, GamepadButton.l3);
+    await tap2.up();
+    expect(model.state.buttons & GamepadButton.l3, 0);
+  });
+
+  testWidgets('test pad renders profile, responds to touches, and exits', (
+    tester,
+  ) async {
+    const profile = ControllerProfile(
+      id: 'test-pad-profile',
+      name: 'Test Pad Profile',
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ControllerTestPadPage(profile: profile),
+      ),
+    );
+    expect(find.text('Exit Test Pad (Test Pad Profile)'), findsOneWidget);
+    final a = await tester.startGesture(tester.getCenter(control('A')));
+    await tester.pump();
+    expect(find.textContaining('Active: A'), findsOneWidget);
+    await a.up();
+    await tester.pump();
+    expect(find.textContaining('Active: None'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('exit-test-pad')));
+    await tester.pumpAndSettle();
+    expect(find.byType(ControllerTestPadPage), findsNothing);
   });
 }

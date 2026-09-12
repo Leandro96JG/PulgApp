@@ -9,15 +9,21 @@ import 'gamepad_state.dart';
 /// credentials cannot be copied into a controller profile. Future remapping and
 /// sensitivity settings can be added through a new schema version.
 final class ControllerStickSettings {
-  const ControllerStickSettings({this.deadZone = .10, this.sensitivity = 1});
+  const ControllerStickSettings({
+    this.deadZone = .10,
+    this.sensitivity = 1,
+    this.digitalTriggers = false,
+  });
 
   static const defaults = ControllerStickSettings();
   final double deadZone;
   final double sensitivity;
+  final bool digitalTriggers;
 
   Map<String, Object> toJson() => {
     'deadZone': deadZone,
     'sensitivity': sensitivity,
+    'digitalTriggers': digitalTriggers,
   };
 
   static ControllerStickSettings? tryParse(Object? value) {
@@ -25,9 +31,13 @@ final class ControllerStickSettings {
     final deadZone = value['deadZone'];
     final sensitivity = value['sensitivity'];
     if (deadZone is! num || sensitivity is! num) return null;
+    final digitalTriggers = value['digitalTriggers'] is bool
+        ? value['digitalTriggers'] as bool
+        : false;
     final settings = ControllerStickSettings(
       deadZone: deadZone.toDouble(),
       sensitivity: sensitivity.toDouble(),
+      digitalTriggers: digitalTriggers,
     );
     return settings.isValid ? settings : null;
   }
