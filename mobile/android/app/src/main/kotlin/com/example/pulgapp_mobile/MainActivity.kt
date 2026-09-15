@@ -43,5 +43,58 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(android.content.Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+        }
+        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "pulgapp/vibrate")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "click", "heavyClick", "tick" -> {
+                        var played = false
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            try {
+                                val effectId = when (call.method) {
+                                    "heavyClick" -> android.os.VibrationEffect.EFFECT_HEAVY_CLICK
+                                    "tick" -> android.os.VibrationEffect.EFFECT_TICK
+                                    else -> android.os.VibrationEffect.EFFECT_CLICK
+                                }
+                                vibrator.vibrate(android.os.VibrationEffect.createPredefined(effectId))
+                                played = true
+                            } catch (_: Exception) {
+                                played = false
+                            }
+                        }
+                        if (!played) {
+                            val durationMs = when (call.method) {
+                                "heavyClick" -> 16L
+                                "tick" -> 8L
+                                else -> 10L
+                            }
+                            val amplitude = when (call.method) {
+                                "heavyClick" -> 140
+                                "tick" -> 80
+                                else -> 110
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                val amp = if (vibrator.hasAmplitudeControl()) amplitude else android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                                vibrator.vibrate(android.os.VibrationEffect.createOneShot(durationMs, amp))
+                            } else {
+                                @Suppress("DEPRECATION")
+                                vibrator.vibrate(durationMs)
+                            }
+                        }
+                        result.success(null)
+                    }
+                    "cancel" -> {
+                        vibrator.cancel()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 }

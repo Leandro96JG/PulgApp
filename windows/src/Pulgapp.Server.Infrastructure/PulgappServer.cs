@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -6,6 +7,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -60,7 +62,7 @@ public sealed class PulgappServer : IAsyncDisposable
     private Task? _udpTask;
     private Task? _watchdogTask;
     private bool _acceptingConnections;
-    private readonly Dictionary<ulong, ControlConnection> _connections = [];
+    private readonly ConcurrentDictionary<ulong, ControlConnection> _connections = [];
     private readonly PulgappMdnsAdvertiser _mdnsAdvertiser = new();
 
     public PulgappServer(PulgappServerOptions options, SessionCoordinator coordinator)
@@ -101,6 +103,7 @@ public sealed class PulgappServer : IAsyncDisposable
         _application.MapGet("/health", () => Results.Json(new { status = "ok" }));
         _application.Map("/control", HandleControlAsync);
         await _application.StartAsync(_stopping.Token);
+        _coordinator.FeedbackReceived += HandleFeedbackReceived;
         _mdnsAdvertiser.Start(_options.ServerName, TcpPort, _serverId, GetLanIpv4Addresses());
         _acceptingConnections = true;
         _udpTask = ReceiveUdpAsync(_stopping.Token);
@@ -155,7 +158,7 @@ public sealed class PulgappServer : IAsyncDisposable
             }
 
             _coordinator.Release(connection.SessionId);
-            _connections.Remove(connection.SessionId);
+            _connections.TryRemove(connection.SessionId, out _);
             try
             {
                 if (connection.Socket.State == WebSocketState.Open)
@@ -166,6 +169,7 @@ public sealed class PulgappServer : IAsyncDisposable
             catch (WebSocketException) { }
             catch (ObjectDisposedException) { }
             catch (OperationCanceledException) { }
+            await connection.DisposeAsync();
 
             return true;
         }
@@ -183,6 +187,7 @@ public sealed class PulgappServer : IAsyncDisposable
             return;
         }
 
+        _coordinator.FeedbackReceived -= HandleFeedbackReceived;
         _acceptingConnections = false;
         await _stateLock.WaitAsync(cancellationToken);
         try
@@ -200,6 +205,7 @@ public sealed class PulgappServer : IAsyncDisposable
                 catch (WebSocketException) { }
                 catch (ObjectDisposedException) { }
                 catch (OperationCanceledException) { }
+                await connection.DisposeAsync();
             }
             _connections.Clear();
         }
@@ -299,9 +305,9 @@ public sealed class PulgappServer : IAsyncDisposable
             }
 
             var credentials = start.Credentials!;
-            connection = new ControlConnection(socket, remoteAddress.MapToIPv4(), credentials.SessionId, start.Slot!.Value, parsedHello.ClientName, DateTimeOffset.UtcNow);
-            _connections.Add(credentials.SessionId, connection);
-            await SendJsonAsync(socket, new WelcomeMessage(1, "welcome", _serverId, _options.ServerName, credentials.SessionId.ToString("x16"), WebEncoders.Base64UrlEncode(credentials.UdpToken), UdpPort, connection.Slot, "x360", parsedHello.ResumeToken is not null, WebEncoders.Base64UrlEncode(credentials.ResumeToken), 250, 15000), context.RequestAborted);
+            connection = new ControlConnection(socket, remoteAddress.MapToIPv4(), credentials.SessionId, start.Slot!.Value, parsedHello.ClientName, DateTimeOffset.UtcNow, parsedHello.SupportsRumble, (s, m, ct) => SendJsonAsync(s, m, ct));
+            _connections[credentials.SessionId] = connection;
+            await SendJsonAsync(socket, new WelcomeMessage(1, "welcome", _serverId, _options.ServerName, credentials.SessionId.ToString("x16"), WebEncoders.Base64UrlEncode(credentials.UdpToken), UdpPort, connection.Slot, connection.Slot <= 4 ? "x360" : "ds4", parsedHello.ResumeToken is not null, WebEncoders.Base64UrlEncode(credentials.ResumeToken), 250, 15000), context.RequestAborted);
         }
         finally
         {
@@ -323,9 +329,10 @@ public sealed class PulgappServer : IAsyncDisposable
             await _stateLock.WaitAsync();
             try
             {
-                if (connection is not null && _connections.Remove(connection.SessionId))
+                if (connection is not null && _connections.TryRemove(connection.SessionId, out _))
                 {
                     _coordinator.HandleControlLoss(connection.SessionId);
+                    await connection.DisposeAsync();
                 }
             }
             finally
@@ -498,7 +505,15 @@ public sealed class PulgappServer : IAsyncDisposable
         finally { ArrayPool<byte>.Shared.Return(buffer); }
     }
 
-    private static bool TryParseHello(JsonDocument document, out (string? Pin, string ClientId, string ClientName, string? ResumeToken) hello, out ErrorMessage? error)
+    private void HandleFeedbackReceived(ulong sessionId, byte lowFrequency, byte highFrequency)
+    {
+        if (_connections.TryGetValue(sessionId, out var connection))
+        {
+            connection.EnqueueRumble(lowFrequency, highFrequency);
+        }
+    }
+
+    private static bool TryParseHello(JsonDocument document, out (string? Pin, string ClientId, string ClientName, string? ResumeToken, bool SupportsRumble) hello, out ErrorMessage? error)
     {
         hello = default;
         error = null;
@@ -524,21 +539,109 @@ public sealed class PulgappServer : IAsyncDisposable
             return false;
         }
 
-        hello = (hasPin ? pin.GetString() : null, clientId.GetString()!, clientName.GetString()!, hasResumeToken ? resumeToken.GetString() : null);
+        var supportsRumble = capabilities.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String && value.GetString() == "rumble_v1");
+        hello = (hasPin ? pin.GetString() : null, clientId.GetString()!, clientName.GetString()!, hasResumeToken ? resumeToken.GetString() : null, supportsRumble);
         return true;
     }
 
-    private sealed class ControlConnection(WebSocket socket, IPAddress address, ulong sessionId, int slot, string clientName, DateTimeOffset packetRateStartedAt)
+    private sealed class ControlConnection : IAsyncDisposable
     {
-        public WebSocket Socket { get; } = socket;
-        public IPAddress Address { get; } = address;
-        public ulong SessionId { get; } = sessionId;
-        public int Slot { get; } = slot;
-        public string ClientName { get; } = clientName;
-        public DateTimeOffset PacketRateStartedAt { get; } = packetRateStartedAt;
+        public WebSocket Socket { get; }
+        public IPAddress Address { get; }
+        public ulong SessionId { get; }
+        public int Slot { get; }
+        public string ClientName { get; }
+        public DateTimeOffset PacketRateStartedAt { get; }
+        public bool SupportsRumble { get; }
         public bool InputReadySent { get; set; }
         public DateTimeOffset? LastInputAt { get; set; }
         public long AcceptedPacketCount { get; set; }
+
+        private readonly Channel<(byte Low, byte High)>? _rumbleChannel;
+        private readonly CancellationTokenSource? _rumbleCts;
+        private readonly Task? _rumbleTask;
+        private (byte Low, byte High) _lastRumble;
+
+        public ControlConnection(
+            WebSocket socket,
+            IPAddress address,
+            ulong sessionId,
+            int slot,
+            string clientName,
+            DateTimeOffset packetRateStartedAt,
+            bool supportsRumble,
+            Func<WebSocket, ControlMessage, CancellationToken, Task> sendJsonAsync)
+        {
+            Socket = socket;
+            Address = address;
+            SessionId = sessionId;
+            Slot = slot;
+            ClientName = clientName;
+            PacketRateStartedAt = packetRateStartedAt;
+            SupportsRumble = supportsRumble;
+
+            if (supportsRumble)
+            {
+                _rumbleChannel = Channel.CreateBounded<(byte Low, byte High)>(new BoundedChannelOptions(1)
+                {
+                    FullMode = BoundedChannelFullMode.DropOldest,
+                    SingleReader = true,
+                    SingleWriter = false,
+                });
+                _rumbleCts = new CancellationTokenSource();
+                var token = _rumbleCts.Token;
+                _rumbleTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await foreach (var (low, high) in _rumbleChannel.Reader.ReadAllAsync(token))
+                        {
+                            try
+                            {
+                                await sendJsonAsync(socket, new RumbleMessage(1, "rumble", low, high), token);
+                            }
+                            catch
+                            {
+                                // Rumble failure must never affect input handling or connection
+                            }
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                }, token);
+            }
+        }
+
+        public void EnqueueRumble(byte low, byte high)
+        {
+            if (!SupportsRumble || _rumbleChannel is null)
+            {
+                return;
+            }
+
+            if (_lastRumble.Low == low && _lastRumble.High == high)
+            {
+                return;
+            }
+
+            _lastRumble = (low, high);
+            _rumbleChannel.Writer.TryWrite((low, high));
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_rumbleChannel is not null)
+            {
+                _rumbleChannel.Writer.TryComplete();
+                _rumbleCts?.Cancel();
+                if (_rumbleTask is not null)
+                {
+                    try { await _rumbleTask; }
+                    catch { }
+                }
+
+                _rumbleCts?.Dispose();
+            }
+        }
     }
 
     private static bool HasVersionAndType(JsonElement root, out string? type)

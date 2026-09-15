@@ -178,6 +178,36 @@ public sealed class SessionCoordinatorTests
         public void Apply(GamepadState state) { }
         public void Neutralize() => NeutralizeCount++;
         public void Disconnect() => DisconnectCount++;
+        public Action<byte, byte>? FeedbackReceived { get; set; }
+    }
+
+    [Fact]
+    public void Feedback_from_controller_raises_event_with_session_id()
+    {
+        var factory = new FakeFactory();
+        var timeProvider = new FakeTimeProvider();
+        using var coordinator = new SessionCoordinator(factory, timeProvider);
+
+        ulong receivedSessionId = 0;
+        byte receivedLow = 0;
+        byte receivedHigh = 0;
+        coordinator.FeedbackReceived += (sessionId, low, high) =>
+        {
+            receivedSessionId = sessionId;
+            receivedLow = low;
+            receivedHigh = high;
+        };
+
+        var result = coordinator.StartNew("client-1");
+        Assert.True(result.Succeeded);
+
+        var controller = factory.Controllers.Single();
+        Assert.NotNull(controller.FeedbackReceived);
+
+        controller.FeedbackReceived(180, 64);
+        Assert.Equal(result.Credentials!.SessionId, receivedSessionId);
+        Assert.Equal(180, receivedLow);
+        Assert.Equal(64, receivedHigh);
     }
 
     private sealed class FakeTimeProvider : TimeProvider

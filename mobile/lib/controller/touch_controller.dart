@@ -1,11 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../gamepad_input_model.dart';
 import '../gamepad_state.dart';
 import '../controller_profile.dart';
+import '../app_haptics.dart';
 
 const _surface = Color(0xff101419);
 const _control = Color(0xff252c34);
@@ -263,7 +263,7 @@ class _TouchButton extends StatelessWidget {
         key: ValueKey('control-$controlId'),
         behavior: HitTestBehavior.opaque,
         onPointerDown: (event) {
-          HapticFeedback.lightImpact();
+          AppHaptics.buttonPress();
           model.pressButton(event.pointer, bit);
         },
         onPointerUp: (event) => model.releasePointer(event.pointer),
@@ -428,7 +428,7 @@ class _StickState extends State<_Stick> {
       if (elapsed < const Duration(milliseconds: 300) && distance < 60) {
         final button = widget.left ? GamepadButton.l3 : GamepadButton.r3;
         widget.model.pressButton(pointer, button);
-        HapticFeedback.mediumImpact();
+        AppHaptics.firmImpact();
         _lastTapTime = null;
         _lastTapOrigin = null;
         return;
@@ -559,7 +559,7 @@ class _Dpad extends StatelessWidget {
               GamepadButton.dpadLeft |
               GamepadButton.dpadRight);
       if (bits != 0 && bits != currentDpad) {
-        HapticFeedback.selectionClick();
+        AppHaptics.buttonPress();
       }
       model.pressButton(pointer, bits);
     },
@@ -624,7 +624,7 @@ class _Trigger extends StatelessWidget {
       final prev = left ? model.state.leftTrigger : model.state.rightTrigger;
       final amount = digital ? 1.0 : (1 - position.dy / size.height);
       if (prev == 0 && amount > 0) {
-        HapticFeedback.selectionClick();
+        AppHaptics.firmImpact();
       }
       model.updateTrigger(
         pointer: pointer,

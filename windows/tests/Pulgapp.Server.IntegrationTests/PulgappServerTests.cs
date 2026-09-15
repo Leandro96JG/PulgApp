@@ -307,5 +307,39 @@ public sealed class PulgappServerTests
         public void Neutralize() => AppliedStates.Add(GamepadState.Neutral);
 
         public void Disconnect() { }
+
+        public Action<byte, byte>? FeedbackReceived { get; set; }
+    }
+
+    [Fact]
+    public async Task RumbleFeedbackIsForwardedOverWebSocketWhenOffered()
+    {
+        var factory = new FakeControllerFactory();
+        await using var server = new PulgappServer(new PulgappServerOptions(FindAvailablePort(), 0, "482913"), new SessionCoordinator(factory, TimeProvider.System));
+        await server.StartAsync();
+
+        using var socket = new ClientWebSocket();
+        await socket.ConnectAsync(new Uri($"ws://127.0.0.1:{GetTcpPort(server)}/control"), CancellationToken.None);
+        await SendJsonAsync(socket, new
+        {
+            v = 1,
+            type = "hello",
+            clientId = Guid.NewGuid(),
+            clientName = "Rumble Phone",
+            appVersion = "0.1.0",
+            pin = "482913",
+            capabilities = new[] { "udp_input_v1", "rumble_v1" },
+        });
+
+        using var welcome = await ReceiveJsonAsync(socket);
+        Assert.Equal("welcome", welcome.RootElement.GetProperty("type").GetString());
+
+        Assert.NotNull(factory.Controller.FeedbackReceived);
+        factory.Controller.FeedbackReceived(180, 64);
+
+        using var rumble = await ReceiveJsonAsync(socket);
+        Assert.Equal("rumble", rumble.RootElement.GetProperty("type").GetString());
+        Assert.Equal(180, rumble.RootElement.GetProperty("lowFrequency").GetByte());
+        Assert.Equal(64, rumble.RootElement.GetProperty("highFrequency").GetByte());
     }
 }

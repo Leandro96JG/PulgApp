@@ -17,6 +17,8 @@ public interface VirtualController
     void Neutralize();
 
     void Disconnect();
+
+    Action<byte, byte>? FeedbackReceived { get; set; }
 }
 
 public interface VirtualControllerFactory

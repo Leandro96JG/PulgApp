@@ -56,6 +56,7 @@ public sealed class Ds4VirtualController : VirtualController
     }
 
     public ControllerKind Kind => ControllerKind.Ds4;
+    public Action<byte, byte>? FeedbackReceived { get; set; }
 
     public void Connect()
     {
@@ -65,6 +66,9 @@ public sealed class Ds4VirtualController : VirtualController
         }
 
         _target.Connect();
+#pragma warning disable CS0618
+        _target.FeedbackReceived += OnFeedbackReceived;
+#pragma warning restore CS0618
         _connected = true;
         _worker = Task.Run(ProcessStatesAsync);
         Apply(GamepadState.Neutral);
@@ -87,6 +91,9 @@ public sealed class Ds4VirtualController : VirtualController
             return;
         }
 
+#pragma warning disable CS0618
+        _target.FeedbackReceived -= OnFeedbackReceived;
+#pragma warning restore CS0618
         _states.Writer.TryWrite(GamepadState.Neutral);
         _states.Writer.TryComplete();
         _worker!.GetAwaiter().GetResult();
@@ -94,6 +101,13 @@ public sealed class Ds4VirtualController : VirtualController
         _disposable?.Dispose();
         _connected = false;
     }
+
+#pragma warning disable CS0618
+    private void OnFeedbackReceived(object sender, DualShock4FeedbackReceivedEventArgs e)
+    {
+        FeedbackReceived?.Invoke(e.LargeMotor, e.SmallMotor);
+    }
+#pragma warning restore CS0618
 
     private async Task ProcessStatesAsync()
     {
@@ -158,6 +172,7 @@ public sealed class X360VirtualController : VirtualController
     }
 
     public ControllerKind Kind => ControllerKind.X360;
+    public Action<byte, byte>? FeedbackReceived { get; set; }
 
     public void Connect()
     {
@@ -167,6 +182,7 @@ public sealed class X360VirtualController : VirtualController
         }
 
         _target.Connect();
+        _target.FeedbackReceived += OnFeedbackReceived;
         _connected = true;
         _worker = Task.Run(ProcessStatesAsync);
         Apply(GamepadState.Neutral);
@@ -189,12 +205,18 @@ public sealed class X360VirtualController : VirtualController
             return;
         }
 
+        _target.FeedbackReceived -= OnFeedbackReceived;
         _states.Writer.TryWrite(GamepadState.Neutral);
         _states.Writer.TryComplete();
         _worker!.GetAwaiter().GetResult();
         _target.Disconnect();
         _disposable?.Dispose();
         _connected = false;
+    }
+
+    private void OnFeedbackReceived(object sender, Xbox360FeedbackReceivedEventArgs e)
+    {
+        FeedbackReceived?.Invoke(e.LargeMotor, e.SmallMotor);
     }
 
     private async Task ProcessStatesAsync()

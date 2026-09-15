@@ -30,8 +30,8 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P5 - Product UX And Optional Feedback`
-- Next task: `P5-04` Optional rumble forwarding or QR connection
-- Last completed task: `P5-03` Add controller customization settings
+- Next task: `P5-05` Add QR connection, tray behavior, single-instance handling, and start-at-login
+- Last completed task: `P5-04` Add optional rumble forwarding over WebSocket
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 - Branch exception: On `codex/defer-g3-physical-validation`, the project owner authorized P4 work before the remaining G3 physical compatibility matrix and two-hour load run. G3 remains deferred and must not be reported as passed or used as release evidence.
@@ -453,7 +453,7 @@ Evidence (2026-08-31, user-reported manual verification):
 - [x] Add layout movement/sizing, button remapping, dead zones, sensitivity, and local haptics.
 - [x] Design a touch-first layout with large, well-spaced buttons, clear grouping, and minimal visual status so the player can play without watching the phone screen.
 - [x] Validate the layout with multitouch, accidental touch prevention, landscape orientation, and small-phone safe areas.
-- [ ] Add optional rumble forwarding over WebSocket.
+- [x] Add optional rumble forwarding over WebSocket.
 - [ ] Add QR connection, tray behavior, single-instance handling, and start-at-login.
 - [ ] Verify safe areas and multitouch on small phones and tablets.
 
@@ -487,6 +487,14 @@ P5 controller-customization progress (2026-09-03):
 - Added offline test pad (`ControllerTestPadPage`), digital trigger mode setting per profile, double-tap on sticks for L3/R3, and PIN pre-population and local persistence on 2026-09-12.
 - Branch `feature/ux-and-controls-improvements` pushed to GitHub; verified with `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (50/50 tests pass), `flutter build apk --debug --no-pub`, and Windows `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (39/39 tests pass).
 - Manual (2026-09-12, user-reported): physical testing of all UX and controls improvements (PIN persistence, digital triggers, stick double-tap for L3/R3, and offline Test Pad) passed successfully.
+
+P5 optional rumble forwarding evidence (2026-09-12):
+- Added `Action<byte, byte>? FeedbackReceived` seam to `VirtualController`, `X360VirtualController`, `Ds4VirtualController`, and test fake adapters.
+- In `SessionCoordinator`, hooked slot controller feedback to raise `FeedbackReceived(sessionId, lowFrequency, highFrequency)` safely outside state locks.
+- In `PulgappServer`, parsed client capability `"rumble_v1"` from WebSocket `hello`, hooked coordinator feedback, and queued rumble events onto a bounded channel (`DropOldest`, capacity 1) per client with deduplication and unawaited non-blocking delivery. Rumble errors never delay UDP input or trigger disconnects.
+- In Flutter mobile client, added `'rumble_v1'` to `capabilities`, exposed `Stream<RumbleMessage> get rumble`, and wired incoming rumble to device haptic feedback in `_ControllerPageState` safely wrapped in `try/catch`.
+- Verified Windows tests: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (41/41 tests pass, including new Core feedback test and Integration rumble forwarding test).
+- Verified mobile client: `flutter analyze --no-pub` (0 issues), `flutter test test/controller_connection_test.dart --no-pub` (2/2 pass), `flutter test --no-pub` (51/51 tests pass), and `flutter build apk --debug --no-pub` (built `build/app/outputs/flutter-apk/app-debug.apk`).
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 

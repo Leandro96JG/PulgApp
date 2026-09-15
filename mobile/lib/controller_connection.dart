@@ -31,6 +31,8 @@ final class ControllerConnection {
   late final InputSendScheduler _scheduler;
   final StreamController<PulgappConnectionState> _states =
       StreamController<PulgappConnectionState>.broadcast();
+  final StreamController<RumbleMessage> _rumble =
+      StreamController<RumbleMessage>.broadcast();
   final Stopwatch _clock = Stopwatch()..start();
   WebSocket? _webSocket;
   StreamSubscription<dynamic>? _controlSubscription;
@@ -49,6 +51,7 @@ final class ControllerConnection {
   bool _recovering = false;
 
   Stream<PulgappConnectionState> get states => _states.stream;
+  Stream<RumbleMessage> get rumble => _rumble.stream;
   PulgappConnectionState get state => _state;
   String? get error => _error;
   WelcomeMessage? get welcome => _welcome;
@@ -114,7 +117,7 @@ final class ControllerConnection {
             clientId: clientId,
             clientName: clientName,
             appVersion: '0.1.0',
-            capabilities: const ['udp_input_v1'],
+            capabilities: const ['udp_input_v1', 'rumble_v1'],
             pin: pin,
             resumeToken: resumeToken,
           ).toJson(),
@@ -160,6 +163,7 @@ final class ControllerConnection {
   Future<void> dispose() async {
     await _close(sendSuspend: false);
     await _states.close();
+    await _rumble.close();
   }
 
   void _handleControlMessage(
@@ -176,6 +180,10 @@ final class ControllerConnection {
         case 'input_ready':
           _udpReadyTimer?.cancel();
           _setState(PulgappConnectionState.connected);
+        case 'rumble':
+          final low = (value['lowFrequency'] as num?)?.toInt() ?? 0;
+          final high = (value['highFrequency'] as num?)?.toInt() ?? 0;
+          _rumble.add(RumbleMessage(low, high));
         case 'error':
           _error =
               value['message'] as String? ?? 'Server rejected the connection.';

@@ -47,6 +47,8 @@ public sealed class SessionCoordinator : IDisposable
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
 
+    public event Action<ulong, byte, byte>? FeedbackReceived;
+
     public bool IsActive
     {
         get
@@ -322,6 +324,27 @@ public sealed class SessionCoordinator : IDisposable
             }
 
             slot.Controller = controller;
+            if (controller is not null)
+            {
+                controller.FeedbackReceived = (largeMotor, smallMotor) =>
+                {
+                    ulong sessionId;
+                    lock (_gate)
+                    {
+                        if (slot.State is not (LobbySlotState.Active or LobbySlotState.InputTimedOut))
+                        {
+                            return;
+                        }
+
+                        sessionId = slot.SessionId;
+                    }
+
+                    if (sessionId != 0)
+                    {
+                        FeedbackReceived?.Invoke(sessionId, largeMotor, smallMotor);
+                    }
+                };
+            }
             slot.ClientId = clientId;
             slot.SessionId = credentials.SessionId;
             slot.UdpToken = credentials.UdpToken.ToArray();
@@ -377,6 +400,11 @@ public sealed class SessionCoordinator : IDisposable
 
     private static void Clear(Slot slot)
     {
+        if (slot.Controller is not null)
+        {
+            slot.Controller.FeedbackReceived = null;
+        }
+
         slot.Controller = null;
         slot.ClientId = null;
         slot.ResumeToken = null;

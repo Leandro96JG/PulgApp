@@ -1,4 +1,4 @@
-﻿using System.Buffers.Binary;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -283,6 +283,8 @@ internal static class LoopbackLoadRun
         public void Neutralize() => LastAppliedState = GamepadState.Neutral;
 
         public void Disconnect() { }
+
+        public Action<byte, byte>? FeedbackReceived { get; set; }
     }
 
     private sealed class LoadClient : IAsyncDisposable
