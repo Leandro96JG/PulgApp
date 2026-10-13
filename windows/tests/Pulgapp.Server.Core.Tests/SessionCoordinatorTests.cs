@@ -210,6 +210,43 @@ public sealed class SessionCoordinatorTests
         Assert.Equal(64, receivedHigh);
     }
 
+    [Fact]
+    public void StartNew_with_preferred_kind_allocates_matching_slot()
+    {
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
+
+        var ds4Session = coordinator.StartNew("client-ds4", ControllerKind.Ds4);
+        Assert.True(ds4Session.Succeeded);
+        Assert.Equal(5, ds4Session.Slot);
+        Assert.Equal(ControllerKind.Ds4, coordinator.GetSlotStatuses().Single(s => s.Slot == 5).ControllerKind);
+
+        var x360Session = coordinator.StartNew("client-xbox", ControllerKind.X360);
+        Assert.True(x360Session.Succeeded);
+        Assert.Equal(1, x360Session.Slot);
+        Assert.Equal(ControllerKind.X360, coordinator.GetSlotStatuses().Single(s => s.Slot == 1).ControllerKind);
+    }
+
+    [Fact]
+    public void StartNew_falls_back_to_available_slots_when_preferred_is_full()
+    {
+        var factory = new FakeFactory();
+        var coordinator = CreateCoordinator(factory, out _);
+
+        // Fill all 4 DS4 slots (5, 6, 7, 8)
+        for (var i = 1; i <= 4; i++)
+        {
+            var res = coordinator.StartNew($"ds4-{i}", ControllerKind.Ds4);
+            Assert.True(res.Succeeded);
+            Assert.Equal(4 + i, res.Slot);
+        }
+
+        // 5th client requesting DS4 falls back to lowest free slot (Slot 1, X360)
+        var fallback = coordinator.StartNew("ds4-overflow", ControllerKind.Ds4);
+        Assert.True(fallback.Succeeded);
+        Assert.Equal(1, fallback.Slot);
+    }
+
     private sealed class FakeTimeProvider : TimeProvider
     {
         private DateTimeOffset _utcNow = DateTimeOffset.UnixEpoch;

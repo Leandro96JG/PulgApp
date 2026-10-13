@@ -83,7 +83,7 @@ public sealed class SessionCoordinator : IDisposable
         }
     }
 
-    public LobbyStartResult StartNew(string clientId)
+    public LobbyStartResult StartNew(string clientId, ControllerKind? preferredKind = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
 
@@ -94,7 +94,13 @@ public sealed class SessionCoordinator : IDisposable
                 return new LobbyStartResult(LobbyStartStatus.ClientAlreadyConnected);
             }
 
-            var slot = _slots.FirstOrDefault(slot => slot.State == LobbySlotState.Free);
+            Slot? slot = null;
+            if (preferredKind.HasValue)
+            {
+                slot = _slots.FirstOrDefault(s => s.State == LobbySlotState.Free && s.ControllerKind == preferredKind.Value);
+            }
+
+            slot ??= _slots.FirstOrDefault(s => s.State == LobbySlotState.Free);
             if (slot is null)
             {
                 return new LobbyStartResult(LobbyStartStatus.ServerFull);

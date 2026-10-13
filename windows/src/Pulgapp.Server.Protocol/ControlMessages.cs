@@ -14,7 +14,8 @@ public sealed record HelloMessage(
     [property: JsonPropertyName("appVersion")] string AppVersion,
     [property: JsonPropertyName("capabilities")] IReadOnlyList<string> Capabilities,
     [property: JsonPropertyName("pin")] string? Pin = null,
-    [property: JsonPropertyName("resumeToken")] string? ResumeToken = null)
+    [property: JsonPropertyName("resumeToken")] string? ResumeToken = null,
+    [property: JsonPropertyName("preferredController")] string? PreferredController = null)
     : ControlMessage(Version, Type);
 
 public sealed record WelcomeMessage(

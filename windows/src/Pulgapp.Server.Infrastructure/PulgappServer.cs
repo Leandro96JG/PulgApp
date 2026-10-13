@@ -288,7 +288,7 @@ public sealed class PulgappServer : IAsyncDisposable
                     return;
                 }
 
-                start = _coordinator.StartNew(parsedHello.ClientId);
+                start = _coordinator.StartNew(parsedHello.ClientId, parsedHello.PreferredKind);
             }
 
             if (!start.Succeeded)
@@ -513,7 +513,7 @@ public sealed class PulgappServer : IAsyncDisposable
         }
     }
 
-    private static bool TryParseHello(JsonDocument document, out (string? Pin, string ClientId, string ClientName, string? ResumeToken, bool SupportsRumble) hello, out ErrorMessage? error)
+    private static bool TryParseHello(JsonDocument document, out (string? Pin, string ClientId, string ClientName, string? ResumeToken, bool SupportsRumble, ControllerKind? PreferredKind) hello, out ErrorMessage? error)
     {
         hello = default;
         error = null;
@@ -539,8 +539,16 @@ public sealed class PulgappServer : IAsyncDisposable
             return false;
         }
 
+        ControllerKind? preferredKind = null;
+        if (root.TryGetProperty("preferredController", out var preferred) && preferred.ValueKind == JsonValueKind.String)
+        {
+            var prefStr = preferred.GetString()?.ToLowerInvariant();
+            if (prefStr is "ds4" or "playstation" or "ps4") preferredKind = ControllerKind.Ds4;
+            else if (prefStr is "x360" or "xbox") preferredKind = ControllerKind.X360;
+        }
+
         var supportsRumble = capabilities.EnumerateArray().Any(value => value.ValueKind == JsonValueKind.String && value.GetString() == "rumble_v1");
-        hello = (hasPin ? pin.GetString() : null, clientId.GetString()!, clientName.GetString()!, hasResumeToken ? resumeToken.GetString() : null, supportsRumble);
+        hello = (hasPin ? pin.GetString() : null, clientId.GetString()!, clientName.GetString()!, hasResumeToken ? resumeToken.GetString() : null, supportsRumble, preferredKind);
         return true;
     }
 
