@@ -30,8 +30,8 @@ If executable configuration conflicts with prose, stop and reconcile the documen
 ## Current Status
 
 - Current phase: `P5 - Product UX And Optional Feedback`
-- Next task: `P5-05` Add QR connection, tray behavior, single-instance handling, and start-at-login
-- Last completed task: `P5-04` Add optional rumble forwarding over WebSocket
+- Next task: `P5-06` Verify safe areas and multitouch on small phones and tablets
+- Last completed task: `P5-05` Add QR connection, tray behavior, single-instance handling, and start-at-login
 - Blockers: Flutter doctor reports a non-blocking `0.0.0-unknown` version-metadata warning and that the Visual Studio Windows desktop workload is absent; neither is required for the Android client or the .NET WPF host.
 - Gate G0: PASS. Pummel Party accepts four X360 plus four DS4 virtual targets as eight independent players.
 - Branch exception: On `codex/defer-g3-physical-validation`, the project owner authorized P4 work before the remaining G3 physical compatibility matrix and two-hour load run. G3 remains deferred and must not be reported as passed or used as release evidence.
@@ -454,7 +454,7 @@ Evidence (2026-08-31, user-reported manual verification):
 - [x] Design a touch-first layout with large, well-spaced buttons, clear grouping, and minimal visual status so the player can play without watching the phone screen.
 - [x] Validate the layout with multitouch, accidental touch prevention, landscape orientation, and small-phone safe areas.
 - [x] Add optional rumble forwarding over WebSocket.
-- [ ] Add QR connection, tray behavior, single-instance handling, and start-at-login.
+- [x] Add QR connection, tray behavior, single-instance handling, and start-at-login.
 - [ ] Verify safe areas and multitouch on small phones and tablets.
 
 P5 fixed-layout implementation evidence (2026-08-31):
@@ -495,6 +495,23 @@ P5 optional rumble forwarding evidence (2026-09-12):
 - In Flutter mobile client, added `'rumble_v1'` to `capabilities`, exposed `Stream<RumbleMessage> get rumble`, and wired incoming rumble to device haptic feedback in `_ControllerPageState` safely wrapped in `try/catch`.
 - Verified Windows tests: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (41/41 tests pass, including new Core feedback test and Integration rumble forwarding test).
 - Verified mobile client: `flutter analyze --no-pub` (0 issues), `flutter test test/controller_connection_test.dart --no-pub` (2/2 pass), `flutter test --no-pub` (51/51 tests pass), and `flutter build apk --debug --no-pub` (built `build/app/outputs/flutter-apk/app-debug.apk`).
+
+P5 QR connection, tray, single-instance and start-at-login evidence (2026-09-15):
+- Implemented `QrPairingPayload` in `Pulgapp.Server.Protocol` and `QrPairingParser` / `QrPairingData` in Flutter `qr_pairing.dart` with matching `pulgapp://pair?ip={ip}&port={port}&pin={pin}` URI scheme, JSON fallback, and plain text fallback.
+- Added 7 unit tests in `QrPairingPayloadTests.cs` (C#) and 6 unit tests in `qr_pairing_test.dart` (Dart).
+- Added QR code display in Windows WPF `MainWindow` using `QRCoder` (1.6.0) with dynamic updates on PIN regeneration and IP selection.
+- Added `SystemTrayManager` with Windows notification area icon (`NotifyIcon`), context menu (Open, status indicator, exit), double-click restore, and minimize-to-tray on close behavior with balloon tip.
+- Added `SingleInstanceManager` with global Mutex (`Pulgapp_Server_SingleInstance_Mutex`) and Named Pipe (`Pulgapp_Server_Activation_Pipe`) to activate and restore the existing window when a second instance is launched.
+- Added `WindowsStartupManager` to configure `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, user settings persistence in `%LOCALAPPDATA%\Pulgapp\settings.json` (`SettingsManager`), and `--minimized` argument handling.
+- Added `mobile_scanner` 7.4.2 to Flutter client with `QrScannerPage`, camera permission in `AndroidManifest.xml`, "SCAN QR" button in `ConnectPage`, auto-fill and auto-connect upon scan. Added `kotlin.incremental=false` to resolve Windows cross-drive relative path compilation.
+- Verified Windows tests: `dotnet test windows/Pulgapp.sln --configuration Release --no-build -p:Platform=x64` (63/63 tests pass, 0 errors).
+- Verified mobile client: `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (57/57 tests pass), and `flutter build apk --debug --no-pub` (built `build/app/outputs/flutter-apk/app-debug.apk` in 7.1s).
+
+P5 modern UI/UX redesign for PC (WPF) and Android (Flutter) evidence (2026-09-15):
+- Implemented `Styles/ModernTheme.xaml` dark gaming palette (#11141A, #1E2430, #2A3344) with emerald/Xbox (#107C41) and DS4 (#38BDF8) accent colors.
+- Redesigned `MainWindow.xaml` with multi-resolution responsiveness (`MinWidth="580"`, `MinHeight="480"`), fixed header/footer, scrollable slot grid, online status badge, live player counter, and one-click copy buttons for PIN and QR link.
+- Redesigned Android `ConnectPage` in `main.dart` with console dark theme (#0b0e12, #11161c), header shortcut to offline `ControllerTestPadPage`, enhanced profile card with live deadzone, sensitivity and trigger mode chips, clipboard paste buttons on IP and PIN fields, monospace spaced PIN, and fitted action buttons (SCAN QR, FIND SERVER, CONNECT) resilient to landscape (640x320) and portrait (360x640) at 1.5x/2.0x text scales.
+- Added 3 new widget tests in `connect_page_test.dart` (offline test pad shortcut, IP clipboard paste, PIN clipboard paste with digit sanitization); verified `flutter analyze --no-pub` (0 issues), `flutter test --no-pub` (60/60 tests pass), and `flutter build apk --debug --no-pub` (built in 12.2s). All 63 .NET tests pass.
 
 Gate `G5`: invalid profiles recover to defaults and no customization can bypass neutralization behavior.
 
