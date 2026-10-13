@@ -40,4 +40,48 @@ void main() {
     expect(preferences.controllerProfiles.selected.name, 'Friday party');
     expect(storage['controller-profiles-v1'], isNotNull);
   });
+
+  testWidgets('switches controller style to PlayStation 4 and persists', (tester) async {
+    final storage = <String, String>{};
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('pulgapp/preferences'),
+      (call) async {
+        if (call.method == 'getAll') return storage;
+        if (call.method == 'setString') {
+          final arguments = call.arguments as Map<dynamic, dynamic>;
+          storage[arguments['key'] as String] = arguments['value'] as String;
+          return null;
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('pulgapp/preferences'), null));
+
+    final preferences = await ClientPreferences.load();
+    await tester.pumpWidget(MaterialApp(
+      home: ProfileManagerPage(
+        preferences: preferences,
+        initialProfiles: preferences.controllerProfiles,
+      ),
+    ));
+
+    expect(find.text('Xbox'), findsWidgets);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Controller style & response'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('PlayStation 4'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PS4'), findsWidgets);
+    expect(preferences.controllerProfiles.selected.controllerType.name, 'ds4');
+    expect(storage['controller-profiles-v1'], isNotNull);
+    expect(storage['controller-profiles-v1'], contains('ds4'));
+  });
 }

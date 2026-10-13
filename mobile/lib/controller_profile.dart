@@ -2,6 +2,55 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'gamepad_state.dart';
+import 'protocol.dart';
+
+export 'protocol.dart' show ControllerType;
+
+extension ControllerTypeDisplay on ControllerType {
+  String get label => switch (this) {
+    ControllerType.x360 => 'Xbox 360',
+    ControllerType.ds4 => 'PlayStation 4',
+  };
+
+  String get shortLabel => switch (this) {
+    ControllerType.x360 => 'Xbox',
+    ControllerType.ds4 => 'PS4',
+  };
+
+  String slotLabel(String slot) => switch (this) {
+    ControllerType.x360 => slot,
+    ControllerType.ds4 => switch (slot) {
+      'A' => '✕',
+      'B' => '○',
+      'X' => '□',
+      'Y' => '△',
+      'LB' => 'L1',
+      'RB' => 'R1',
+      'Back' => 'Share',
+      'Guide' => 'PS',
+      'Start' => 'Options',
+      _ => slot,
+    },
+  };
+
+  String actionLabel(String actionId) => switch (this) {
+    ControllerType.x360 => ControllerButtonAction.fromId(actionId).label,
+    ControllerType.ds4 => switch (actionId) {
+      'a' => '✕',
+      'b' => '○',
+      'x' => '□',
+      'y' => '△',
+      'lb' => 'L1',
+      'rb' => 'R1',
+      'back' => 'Share',
+      'guide' => 'PS',
+      'start' => 'Options',
+      'l3' => 'L3',
+      'r3' => 'R3',
+      _ => actionId.toUpperCase(),
+    },
+  };
+}
 
 /// A versioned local container for controller settings.
 ///
@@ -114,13 +163,14 @@ final class ControllerButtonMapping {
 
   ControllerButtonAction actionFor(String slot) =>
       ControllerButtonAction.fromId(assignments[slot]!);
-  Iterable<String> get visibleChanges => slots
+  Iterable<String> visibleChanges([ControllerType type = ControllerType.x360]) => slots
       .where(
-        (slot) => actionFor(slot).label.toLowerCase() != slot.toLowerCase(),
+        (slot) => actionFor(slot).id != slot.toLowerCase(),
       )
-      .map((slot) => '$slot → ${actionFor(slot).label}');
-  String get visibleSummary {
-    final changes = visibleChanges.toList();
+      .map((slot) => '${type.slotLabel(slot)} → ${type.actionLabel(actionFor(slot).id)}');
+
+  String visibleSummary([ControllerType type = ControllerType.x360]) {
+    final changes = visibleChanges(type).toList();
     return changes.isEmpty ? 'Default button mapping' : changes.join('  ·  ');
   }
 
@@ -239,6 +289,7 @@ final class ControllerProfile {
   const ControllerProfile({
     required this.id,
     required this.name,
+    this.controllerType = ControllerType.x360,
     this.sticks = ControllerStickSettings.defaults,
     this.buttons = ControllerButtonMapping.identity,
     this.layout = ControllerLayoutSettings.defaults,
@@ -249,16 +300,33 @@ final class ControllerProfile {
 
   final String id;
   final String name;
+  final ControllerType controllerType;
   final ControllerStickSettings sticks;
   final ControllerButtonMapping buttons;
   final ControllerLayoutSettings layout;
 
-  static const fallback = ControllerProfile(id: defaultId, name: 'Default');
+  static const fallback = ControllerProfile(
+    id: defaultId,
+    name: 'Default',
+    controllerType: ControllerType.x360,
+  );
+
+  String get visibleSummary => buttons.visibleSummary(controllerType);
+
+  ControllerProfile updateControllerType(ControllerType type) => ControllerProfile(
+    id: id,
+    name: name,
+    controllerType: type,
+    sticks: sticks,
+    buttons: buttons,
+    layout: layout,
+  );
 
   Map<String, Object> toJson() => {
     'version': currentVersion,
     'id': id,
     'name': name,
+    'controllerType': controllerType.name,
     'sticks': sticks.toJson(),
     'buttons': buttons.toJson(),
     'layout': layout.toJson(),
@@ -284,6 +352,9 @@ final class ControllerProfile {
         cleanName.length > 24) {
       return null;
     }
+    final typeStr = value['controllerType'] as String?;
+    final controllerType =
+        typeStr == 'ds4' ? ControllerType.ds4 : ControllerType.x360;
     final sticks = version == 1
         ? ControllerStickSettings.defaults
         : ControllerStickSettings.tryParse(value['sticks']);
@@ -299,6 +370,7 @@ final class ControllerProfile {
     return ControllerProfile(
       id: cleanId,
       name: cleanName,
+      controllerType: controllerType,
       sticks: sticks,
       buttons: buttons,
       layout: layout,
@@ -341,17 +413,20 @@ final class ControllerProfileLibrary {
       }
       final profilesValue = parsed['profiles'];
       if (profilesValue is! List) return ControllerProfileLibrary.initial();
-      final profiles = <ControllerProfile>[ControllerProfile.fallback];
+      var defaultProfile = ControllerProfile.fallback;
+      final customProfiles = <ControllerProfile>[];
       final ids = {ControllerProfile.defaultId};
       for (final value in profilesValue) {
         final profile = ControllerProfile.tryParse(value);
-        if (profile != null &&
-            ids.add(profile.id) &&
-            profile.id != ControllerProfile.defaultId &&
-            profiles.length < _maximumProfiles) {
-          profiles.add(profile);
+        if (profile == null) continue;
+        if (profile.id == ControllerProfile.defaultId) {
+          defaultProfile = profile;
+        } else if (ids.add(profile.id) &&
+            customProfiles.length < _maximumProfiles - 1) {
+          customProfiles.add(profile);
         }
       }
+      final profiles = <ControllerProfile>[defaultProfile, ...customProfiles];
       final requestedId = parsed['selectedId'];
       final selectedId = requestedId is String && ids.contains(requestedId)
           ? requestedId
@@ -376,11 +451,16 @@ final class ControllerProfileLibrary {
       ? ControllerProfileLibrary._(profiles, id)
       : this;
 
-  ControllerProfileLibrary create({required String id, required String name}) {
+  ControllerProfileLibrary create({
+    required String id,
+    required String name,
+    ControllerType controllerType = ControllerType.x360,
+  }) {
     final profile = ControllerProfile.tryParse({
       'version': ControllerProfile.currentVersion,
       'id': id,
       'name': name,
+      'controllerType': controllerType.name,
       'sticks': ControllerStickSettings.defaults.toJson(),
       'buttons': ControllerButtonMapping.identity.toJson(),
       'layout': ControllerLayoutSettings.defaults.toJson(),
@@ -405,11 +485,35 @@ final class ControllerProfileLibrary {
             'version': ControllerProfile.currentVersion,
             'id': id,
             'name': name,
+            'controllerType': existing.controllerType.name,
             'sticks': existing.sticks.toJson(),
             'buttons': existing.buttons.toJson(),
             'layout': existing.layout.toJson(),
           });
     if (replacement == null) return this;
+    return ControllerProfileLibrary._(
+      List.unmodifiable([
+        for (final profile in profiles)
+          if (profile.id == id) replacement else profile,
+      ]),
+      selectedId,
+    );
+  }
+
+  ControllerProfileLibrary updateControllerType(
+    String id,
+    ControllerType type,
+  ) {
+    final existing = profiles.where((profile) => profile.id == id).firstOrNull;
+    if (existing == null) return this;
+    final replacement = ControllerProfile(
+      id: id,
+      name: existing.name,
+      controllerType: type,
+      sticks: existing.sticks,
+      buttons: existing.buttons,
+      layout: existing.layout,
+    );
     return ControllerProfileLibrary._(
       List.unmodifiable([
         for (final profile in profiles)
@@ -429,6 +533,7 @@ final class ControllerProfileLibrary {
     final replacement = ControllerProfile(
       id: id,
       name: existing.name,
+      controllerType: existing.controllerType,
       sticks: settings,
       buttons: existing.buttons,
       layout: existing.layout,
@@ -451,6 +556,7 @@ final class ControllerProfileLibrary {
     final replacement = ControllerProfile(
       id: id,
       name: existing.name,
+      controllerType: existing.controllerType,
       sticks: existing.sticks,
       buttons: mapping,
       layout: existing.layout,
@@ -473,6 +579,7 @@ final class ControllerProfileLibrary {
     final replacement = ControllerProfile(
       id: id,
       name: existing.name,
+      controllerType: existing.controllerType,
       sticks: existing.sticks,
       buttons: existing.buttons,
       layout: layout,

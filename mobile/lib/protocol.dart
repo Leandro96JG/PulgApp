@@ -12,6 +12,7 @@ final class HelloMessage {
     required this.capabilities,
     this.pin,
     this.resumeToken,
+    this.preferredController,
   });
 
   final String clientId;
@@ -20,6 +21,7 @@ final class HelloMessage {
   final List<String> capabilities;
   final String? pin;
   final String? resumeToken;
+  final String? preferredController;
 
   Map<String, Object> toJson() => {
     'v': 1,
@@ -30,6 +32,7 @@ final class HelloMessage {
     'capabilities': capabilities,
     if (pin != null) 'pin': pin!,
     if (resumeToken != null) 'resumeToken': resumeToken!,
+    if (preferredController != null) 'preferredController': preferredController!,
   };
 }
 

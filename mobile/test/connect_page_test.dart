@@ -130,4 +130,71 @@ void main() {
     expect(find.text('192.168.1.50'), findsOneWidget);
     expect(find.text('654321'), findsOneWidget);
   });
+
+  testWidgets('opens offline test pad from header shortcut', (tester) async {
+    await _showConnectPage(tester, size: const Size(640, 320));
+    final testPadBtn = find.byTooltip('Offline Test Pad');
+    expect(testPadBtn, findsOneWidget);
+
+    await tester.tap(testPadBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('LS:'), findsOneWidget);
+  });
+
+  testWidgets('pastes endpoint from clipboard', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.getData') {
+          return const <String, dynamic>{'text': '192.168.1.99'};
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await _showConnectPage(tester, size: const Size(640, 320));
+    await tester.tap(find.byTooltip('Paste address'));
+    await tester.pump();
+
+    final endpointField = tester.widget<TextField>(
+      find.byKey(const ValueKey('endpoint-field')),
+    );
+    expect(endpointField.controller?.text, '192.168.1.99');
+  });
+
+  testWidgets('pastes and sanitizes PIN from clipboard', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.getData') {
+          return const <String, dynamic>{'text': 'PIN: 987654321'};
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await _showConnectPage(tester, size: const Size(640, 320));
+    await tester.tap(find.byTooltip('Paste PIN'));
+    await tester.pump();
+
+    final pinField = tester.widget<TextField>(
+      find.byKey(const ValueKey('pin-field')),
+    );
+    expect(pinField.controller?.text, '987654');
+  });
 }
+
+

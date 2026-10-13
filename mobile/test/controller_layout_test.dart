@@ -40,6 +40,7 @@ Future<void> showController(
   Size size = const Size(740, 360),
   double scale = 1,
   bool enabled = true,
+  ControllerType controllerType = ControllerType.x360,
   ControllerStickSettings stickSettings = ControllerStickSettings.defaults,
   ControllerButtonMapping buttonMapping = ControllerButtonMapping.identity,
   ControllerLayoutSettings layoutSettings = ControllerLayoutSettings.defaults,
@@ -62,6 +63,7 @@ Future<void> showController(
               key: const ValueKey('preview'),
               child: TouchController(
                 model: model,
+                controllerType: controllerType,
                 enabled: enabled,
                 status: 'Slot 1 | connected',
                 stickSettings: stickSettings,
@@ -498,5 +500,47 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('exit-test-pad')));
     await tester.pumpAndSettle();
     expect(find.byType(ControllerTestPadPage), findsNothing);
+  });
+
+  testWidgets('PS4 controller displays PlayStation symbols and shoulder labels', (
+    tester,
+  ) async {
+    final model = GamepadInputModel();
+    await showController(tester, model, controllerType: ControllerType.ds4);
+
+    expect(find.text('✕'), findsOneWidget);
+    expect(find.text('○'), findsOneWidget);
+    expect(find.text('□'), findsOneWidget);
+    expect(find.text('△'), findsOneWidget);
+    expect(find.text('L1'), findsOneWidget);
+    expect(find.text('R1'), findsOneWidget);
+    expect(find.text('L2'), findsOneWidget);
+    expect(find.text('R2'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('Options'), findsOneWidget);
+    expect(find.text('PS'), findsOneWidget);
+  });
+
+  testWidgets('test pad renders PS4 profile and tracks pressed buttons with PS4 labels', (
+    tester,
+  ) async {
+    const profile = ControllerProfile(
+      id: 'ps4-test-pad',
+      name: 'PS4 Profile',
+      controllerType: ControllerType.ds4,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ControllerTestPadPage(profile: profile),
+      ),
+    );
+    expect(find.text('Exit Test Pad (PS4 Profile)'), findsOneWidget);
+    expect(find.text('✕'), findsOneWidget);
+    final cross = await tester.startGesture(tester.getCenter(control('A')));
+    await tester.pump();
+    expect(find.textContaining('Active: ✕'), findsOneWidget);
+    await cross.up();
+    await tester.pump();
+    expect(find.textContaining('Active: None'), findsOneWidget);
   });
 }

@@ -101,7 +101,8 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
 
   Future<void> _configure(ControllerProfile profile) async {
     var settings = profile.sticks;
-    final result = await showModalBottomSheet<ControllerStickSettings>(
+    var controllerType = profile.controllerType;
+    final result = await showModalBottomSheet<_ProfileSettingsResult>(
       context: context,
       isScrollControlled: true,
       builder: (context) => StatefulBuilder(
@@ -117,8 +118,32 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
-                const Text('Stick & trigger response'),
-                const SizedBox(height: 20),
+                const Text('Controller type & response settings'),
+                const SizedBox(height: 16),
+                Text(
+                  'Controller style',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                SegmentedButton<ControllerType>(
+                  segments: const [
+                    ButtonSegment(
+                      value: ControllerType.x360,
+                      label: Text('Xbox 360'),
+                      icon: Icon(Icons.videogame_asset_outlined),
+                    ),
+                    ButtonSegment(
+                      value: ControllerType.ds4,
+                      label: Text('PlayStation 4'),
+                      icon: Icon(Icons.sports_esports_outlined),
+                    ),
+                  ],
+                  selected: {controllerType},
+                  onSelectionChanged: (selection) => setSheetState(
+                    () => controllerType = selection.first,
+                  ),
+                ),
+                const SizedBox(height: 16),
                 _SettingSlider(
                   label: 'Dead zone',
                   valueLabel: '${(settings.deadZone * 100).round()}%',
@@ -152,7 +177,11 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                 const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Digital triggers (LT / RT)'),
+                  title: Text(
+                    controllerType == ControllerType.ds4
+                        ? 'Digital triggers (L2 / R2)'
+                        : 'Digital triggers (LT / RT)',
+                  ),
                   subtitle: const Text(
                     'Instant 100% response on touch without vertical sliding',
                   ),
@@ -167,7 +196,13 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                 ),
                 const SizedBox(height: 12),
                 FilledButton(
-                  onPressed: () => Navigator.pop(context, settings),
+                  onPressed: () => Navigator.pop(
+                    context,
+                    _ProfileSettingsResult(
+                      sticks: settings,
+                      controllerType: controllerType,
+                    ),
+                  ),
                   child: const Text('Save settings'),
                 ),
               ],
@@ -176,12 +211,16 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
         ),
       ),
     );
-    if (result != null)
-      await _apply(_profiles.updateStickSettings(profile.id, result));
+    if (result != null) {
+      var next = _profiles.updateStickSettings(profile.id, result.sticks);
+      next = next.updateControllerType(profile.id, result.controllerType);
+      await _apply(next);
+    }
   }
 
   Future<void> _configureButtons(ControllerProfile profile) async {
     var mapping = profile.buttons;
+    final type = profile.controllerType;
     final result = await showModalBottomSheet<ControllerButtonMapping>(
       context: context,
       isScrollControlled: true,
@@ -200,7 +239,7 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              profile.name,
+                              '${profile.name} (${type.label})',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const Text(
@@ -225,10 +264,11 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                     itemBuilder: (context, index) {
                       final slot = ControllerButtonMapping.slots[index];
                       final action = mapping.actionFor(slot);
+                      final slotDisplay = type.slotLabel(slot);
                       return Card(
                         child: ListTile(
-                          leading: CircleAvatar(child: Text(slot)),
-                          title: Text('Position $slot'),
+                          leading: CircleAvatar(child: Text(slotDisplay)),
+                          title: Text('Position $slotDisplay'),
                           trailing: DropdownButton<String>(
                             value: action.id,
                             onChanged: (value) {
@@ -241,7 +281,7 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                               for (final option in ControllerButtonAction.all)
                                 DropdownMenuItem(
                                   value: option.id,
-                                  child: Text(option.label),
+                                  child: Text(type.actionLabel(option.id)),
                                 ),
                             ],
                           ),
@@ -443,57 +483,80 @@ class _ProfileManagerPageState extends State<ProfileManagerPage> {
                     Card(
                       child: RadioListTile<String>(
                         value: profile.id,
-                        title: Text(profile.name),
-                        subtitle: Text(
-                          profile.id == ControllerProfile.defaultId
-                              ? 'Standard touch layout'
-                              : 'Ready for your future control settings',
-                        ),
-                        secondary: profile.id == ControllerProfile.defaultId
-                            ? IconButton(
-                                tooltip: 'Test controller',
-                                icon: const Icon(Icons.sports_esports_rounded),
-                                onPressed: () => _testProfile(profile),
-                              )
-                            : PopupMenuButton<String>(
-                                onSelected: (action) {
-                                  if (action == 'test') _testProfile(profile);
-                                  if (action == 'rename')
-                                    _editProfile(profile: profile);
-                                  if (action == 'delete') _delete(profile);
-                                  if (action == 'settings') _configure(profile);
-                                  if (action == 'mapping')
-                                    _configureButtons(profile);
-                                  if (action == 'layout')
-                                    _configureLayout(profile);
-                                },
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                    value: 'test',
-                                    child: Text('Test controller'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'settings',
-                                    child: Text('Stick & trigger settings'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'mapping',
-                                    child: Text('Button mapping'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'layout',
-                                    child: Text('Layout and sizes'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'rename',
-                                    child: Text('Rename'),
-                                  ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text('Delete'),
-                                  ),
-                                ],
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                profile.name,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                profile.controllerType.shortLabel,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          profile.visibleSummary,
+                        ),
+                        secondary: PopupMenuButton<String>(
+                          onSelected: (action) {
+                            if (action == 'test') _testProfile(profile);
+                            if (action == 'settings') _configure(profile);
+                            if (action == 'mapping') _configureButtons(profile);
+                            if (action == 'layout') _configureLayout(profile);
+                            if (action == 'rename')
+                              _editProfile(profile: profile);
+                            if (action == 'delete') _delete(profile);
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'test',
+                              child: Text('Test controller'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'settings',
+                              child: Text('Controller style & response'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'mapping',
+                              child: Text('Button mapping'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'layout',
+                              child: Text('Layout and sizes'),
+                            ),
+                            if (profile.id != ControllerProfile.defaultId) ...[
+                              const PopupMenuItem(
+                                value: 'rename',
+                                child: Text('Rename'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
                 ],
@@ -587,4 +650,14 @@ class _ProfileNameDialogState extends State<_ProfileNameDialog> {
       ),
     ],
   );
+}
+
+class _ProfileSettingsResult {
+  const _ProfileSettingsResult({
+    required this.sticks,
+    required this.controllerType,
+  });
+
+  final ControllerStickSettings sticks;
+  final ControllerType controllerType;
 }

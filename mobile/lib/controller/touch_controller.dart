@@ -20,6 +20,7 @@ class TouchController extends StatefulWidget {
     super.key,
     required this.model,
     required this.status,
+    this.controllerType = ControllerType.x360,
     this.stickSettings = ControllerStickSettings.defaults,
     this.buttonMapping = ControllerButtonMapping.identity,
     this.layoutSettings = ControllerLayoutSettings.defaults,
@@ -28,6 +29,7 @@ class TouchController extends StatefulWidget {
   final GamepadInputModel model;
   final String status;
   final bool enabled;
+  final ControllerType controllerType;
   final ControllerStickSettings stickSettings;
   final ControllerButtonMapping buttonMapping;
   final ControllerLayoutSettings layoutSettings;
@@ -72,10 +74,12 @@ class _TouchControllerState extends State<TouchController>
 
   Widget _button(String slot, {Color color = _ink}) {
     final action = widget.buttonMapping.actionFor(slot);
+    final posLabel = widget.controllerType.slotLabel(slot);
+    final actLabel = widget.controllerType.actionLabel(action.id);
     return _TouchButton(
       controlId: slot,
-      positionLabel: slot,
-      label: action.label,
+      positionLabel: posLabel,
+      label: actLabel,
       bit: action.bit,
       model: widget.model,
       color: color,
@@ -100,9 +104,23 @@ class _TouchControllerState extends State<TouchController>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _button('X', color: const Color(0xff71b7f3))),
+              Expanded(
+                child: _button(
+                  'X',
+                  color: widget.controllerType == ControllerType.ds4
+                      ? const Color(0xffd173ac)
+                      : const Color(0xff71b7f3),
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _button('Y', color: const Color(0xffe7c64d))),
+              Expanded(
+                child: _button(
+                  'Y',
+                  color: widget.controllerType == ControllerType.ds4
+                      ? const Color(0xff62c073)
+                      : const Color(0xffe7c64d),
+                ),
+              ),
             ],
           ),
         ),
@@ -111,9 +129,23 @@ class _TouchControllerState extends State<TouchController>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _button('A', color: const Color(0xff7cda96))),
+              Expanded(
+                child: _button(
+                  'A',
+                  color: widget.controllerType == ControllerType.ds4
+                      ? const Color(0xff5b9bd5)
+                      : const Color(0xff7cda96),
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _button('B', color: const Color(0xfff08790))),
+              Expanded(
+                child: _button(
+                  'B',
+                  color: widget.controllerType == ControllerType.ds4
+                      ? const Color(0xffe06c75)
+                      : const Color(0xfff08790),
+                ),
+              ),
             ],
           ),
         ),
@@ -146,6 +178,7 @@ class _TouchControllerState extends State<TouchController>
                             left: true,
                             model: widget.model,
                             digital: widget.stickSettings.digitalTriggers,
+                            controllerType: widget.controllerType,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -179,6 +212,7 @@ class _TouchControllerState extends State<TouchController>
                             left: false,
                             model: widget.model,
                             digital: widget.stickSettings.digitalTriggers,
+                            controllerType: widget.controllerType,
                           ),
                         ),
                       ],
@@ -611,10 +645,12 @@ class _Trigger extends StatelessWidget {
     required this.left,
     required this.model,
     this.digital = false,
+    this.controllerType = ControllerType.x360,
   });
   final bool left;
   final GamepadInputModel model;
   final bool digital;
+  final ControllerType controllerType;
 
   @override
   Widget build(BuildContext context) => _GestureSurface(
@@ -646,7 +682,9 @@ class _Trigger extends StatelessWidget {
         ),
         Center(
           child: Text(
-            left ? 'LT' : 'RT',
+            controllerType == ControllerType.ds4
+                ? (left ? 'L2' : 'R2')
+                : (left ? 'LT' : 'RT'),
             style: const TextStyle(
               color: _ink,
               fontWeight: FontWeight.w600,

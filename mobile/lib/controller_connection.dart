@@ -48,6 +48,7 @@ final class ControllerConnection {
   String? _error;
   String? _resumeEndpoint;
   String? _resumeToken;
+  String? _preferredController;
   bool _recovering = false;
 
   Stream<PulgappConnectionState> get states => _states.stream;
@@ -56,13 +57,28 @@ final class ControllerConnection {
   String? get error => _error;
   WelcomeMessage? get welcome => _welcome;
 
-  Future<void> connect({required String endpoint, required String pin}) async => _connect(endpoint: endpoint, pin: pin);
+  Future<void> connect({
+    required String endpoint,
+    required String pin,
+    String? preferredController,
+  }) async {
+    _preferredController = preferredController;
+    return _connect(
+      endpoint: endpoint,
+      pin: pin,
+      preferredController: preferredController,
+    );
+  }
 
   Future<void> resume() async {
     final endpoint = _resumeEndpoint;
     final token = _resumeToken;
     if (endpoint == null || token == null) return;
-    await _connect(endpoint: endpoint, resumeToken: token);
+    await _connect(
+      endpoint: endpoint,
+      resumeToken: token,
+      preferredController: _preferredController,
+    );
   }
 
   Future<void> _recover() async {
@@ -88,7 +104,12 @@ final class ControllerConnection {
     }
   }
 
-  Future<void> _connect({required String endpoint, String? pin, String? resumeToken}) async {
+  Future<void> _connect({
+    required String endpoint,
+    String? pin,
+    String? resumeToken,
+    String? preferredController,
+  }) async {
     if (pin != null && !RegExp(r'^\d{6}$').hasMatch(pin)) {
       throw ArgumentError.value(pin, 'pin', 'must be six decimal digits');
     }
@@ -120,6 +141,7 @@ final class ControllerConnection {
             capabilities: const ['udp_input_v1', 'rumble_v1'],
             pin: pin,
             resumeToken: resumeToken,
+            preferredController: preferredController,
           ).toJson(),
         ),
       );

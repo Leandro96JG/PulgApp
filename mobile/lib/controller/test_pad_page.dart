@@ -32,7 +32,7 @@ class _ControllerTestPadPageState extends State<ControllerTestPadPage> {
     final pressed = <String>[];
     for (final action in ControllerButtonAction.all) {
       if (state.buttons & action.bit != 0) {
-        pressed.add(action.label);
+        pressed.add(widget.profile.controllerType.actionLabel(action.id));
       }
     }
     if (state.buttons & GamepadButton.dpadUp != 0) pressed.add('Up');
@@ -45,8 +45,10 @@ class _ControllerTestPadPageState extends State<ControllerTestPadPage> {
     final rt = ((state.rightTrigger / 65535) * 100).round();
     final lsX = (state.leftX / 32767).toStringAsFixed(1);
     final lsY = (state.leftY / 32767).toStringAsFixed(1);
+    final ltLabel = widget.profile.controllerType == ControllerType.ds4 ? 'L2' : 'LT';
+    final rtLabel = widget.profile.controllerType == ControllerType.ds4 ? 'R2' : 'RT';
 
-    return 'LS: ($lsX, $lsY)  LT: $lt%  RT: $rt%\nActive: $btnStr';
+    return 'LS: ($lsX, $lsY)  $ltLabel: $lt%  $rtLabel: $rt%\nActive: $btnStr';
   }
 
   @override
@@ -59,6 +61,7 @@ class _ControllerTestPadPageState extends State<ControllerTestPadPage> {
           children: [
             TouchController(
               model: _model,
+              controllerType: widget.profile.controllerType,
               stickSettings: widget.profile.sticks,
               buttonMapping: widget.profile.buttons,
               layoutSettings: widget.profile.layout,

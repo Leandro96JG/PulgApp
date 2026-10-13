@@ -138,4 +138,52 @@ void main() {
     expect(restored.selected.sticks.deadZone, .15);
     expect(restored.selected.sticks.sensitivity, 1.2);
   });
+
+  test('controller type persists and updates correctly', () {
+    expect(ControllerProfile.fallback.controllerType, ControllerType.x360);
+    final profiles = ControllerProfileLibrary.initial()
+        .create(id: 'ps-fan', name: 'PlayStation Fan')
+        .updateControllerType('ps-fan', ControllerType.ds4)
+        .select('ps-fan');
+    expect(profiles.selected.controllerType, ControllerType.ds4);
+
+    final restored = ControllerProfileLibrary.decode(profiles.encode());
+    expect(restored.selected.controllerType, ControllerType.ds4);
+    expect(restored.selected.name, 'PlayStation Fan');
+  });
+
+  test('controller type adapts visible labels and button remapping summary', () {
+    expect(ControllerType.ds4.label, 'PlayStation 4');
+    expect(ControllerType.ds4.shortLabel, 'PS4');
+    expect(ControllerType.ds4.slotLabel('A'), '✕');
+    expect(ControllerType.ds4.slotLabel('B'), '○');
+    expect(ControllerType.ds4.slotLabel('X'), '□');
+    expect(ControllerType.ds4.slotLabel('Y'), '△');
+    expect(ControllerType.ds4.slotLabel('LB'), 'L1');
+    expect(ControllerType.ds4.slotLabel('RB'), 'R1');
+    expect(ControllerType.ds4.slotLabel('Back'), 'Share');
+    expect(ControllerType.ds4.slotLabel('Start'), 'Options');
+    expect(ControllerType.ds4.slotLabel('Guide'), 'PS');
+
+    expect(ControllerType.x360.label, 'Xbox 360');
+    expect(ControllerType.x360.shortLabel, 'Xbox');
+    expect(ControllerType.x360.slotLabel('A'), 'A');
+
+    final remapped = ControllerButtonMapping.identity.remap('A', 'b');
+    expect(remapped.visibleSummary(ControllerType.x360), 'A → B  ·  B → A');
+    expect(remapped.visibleSummary(ControllerType.ds4), '✕ → ○  ·  ○ → ✕');
+  });
+
+  test('recovers safely from version 3 profiles without controllerType', () {
+    final decoded = ControllerProfile.tryParse({
+      'version': 3,
+      'id': 'legacy',
+      'name': 'Legacy Profile',
+      'sticks': ControllerStickSettings.defaults.toJson(),
+      'buttons': ControllerButtonMapping.identity.toJson(),
+      'layout': ControllerLayoutSettings.defaults.toJson(),
+    });
+    expect(decoded, isNotNull);
+    expect(decoded!.controllerType, ControllerType.x360);
+  });
 }

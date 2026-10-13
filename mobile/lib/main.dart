@@ -5,10 +5,13 @@ import 'package:flutter/services.dart';
 
 import 'client_preferences.dart';
 import 'controller/profile_manager_page.dart';
+import 'controller/test_pad_page.dart';
 import 'controller_profile.dart';
 import 'controller_connection.dart';
 import 'gamepad_input_model.dart';
 import 'controller/touch_controller.dart';
+import 'qr_pairing.dart';
+import 'qr_scanner_page.dart';
 import 'server_discovery.dart';
 
 Future<void> main() async {
@@ -30,6 +33,12 @@ final class PulgappApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(
         seedColor: const Color(0xff75e6b0),
         brightness: Brightness.dark,
+        surface: const Color(0xff11161c),
+      ),
+      scaffoldBackgroundColor: const Color(0xff0b0e12),
+      cardTheme: const CardThemeData(
+        color: Color(0xff161d24),
+        elevation: 0,
       ),
       useMaterial3: true,
     ),
@@ -98,7 +107,11 @@ final class _ConnectPageState extends State<ConnectPage> {
       saveEndpoint: widget.preferences.saveEndpoint,
     );
     try {
-      await connection.connect(endpoint: _endpoint.text, pin: _pin.text);
+      await connection.connect(
+        endpoint: _endpoint.text,
+        pin: _pin.text,
+        preferredController: _profiles.selected.controllerType.name,
+      );
       await widget.preferences.savePin(_pin.text);
       if (!mounted) return;
       await Navigator.of(context).push(
@@ -196,6 +209,27 @@ final class _ConnectPageState extends State<ConnectPage> {
     }
   }
 
+  Future<void> _scanQr() async {
+    final result = await Navigator.of(context).push<QrPairingData>(
+      MaterialPageRoute(builder: (_) => const QrScannerPage()),
+    );
+    if (!mounted || result == null) return;
+    setState(() {
+      _endpoint.text = result.endpoint;
+      _pin.text = result.pin;
+      _endpointError = null;
+      _pinError = null;
+      _error = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Scanned QR code: ${result.endpoint}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    await _connect();
+  }
+
   Future<void> _manageProfiles() async {
     final result = await Navigator.of(context).push<ControllerProfileLibrary>(
       MaterialPageRoute(
@@ -206,6 +240,41 @@ final class _ConnectPageState extends State<ConnectPage> {
       ),
     );
     if (mounted && result != null) setState(() => _profiles = result);
+  }
+
+  Future<void> _openTestPad() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ControllerTestPadPage(profile: _profiles.selected),
+      ),
+    );
+  }
+
+  Future<void> _pasteToEndpoint() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text != null && text.isNotEmpty) {
+      setState(() {
+        _endpoint.text = text;
+        _endpointError = null;
+        _error = null;
+      });
+    }
+  }
+
+  Future<void> _pasteToPin() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim();
+    if (text != null && text.isNotEmpty) {
+      final cleanPin = text.replaceAll(RegExp(r'\D'), '');
+      if (cleanPin.isNotEmpty) {
+        setState(() {
+          _pin.text = cleanPin.length > 6 ? cleanPin.substring(0, 6) : cleanPin;
+          _pinError = null;
+          _error = null;
+        });
+      }
+    }
   }
 
   String? _validateEndpoint(String value) {
@@ -249,7 +318,7 @@ final class _ConnectPageState extends State<ConnectPage> {
           final landscapeForm = constraints.maxWidth >= 560;
           final compact = constraints.maxHeight < 420;
           final horizontalPadding = landscapeForm ? 20.0 : 16.0;
-          final verticalPadding = compact ? 12.0 : 24.0;
+          final verticalPadding = compact ? 10.0 : 20.0;
           final endpointField = TextField(
             key: const ValueKey('endpoint-field'),
             controller: _endpoint,
@@ -272,6 +341,14 @@ final class _ConnectPageState extends State<ConnectPage> {
               icon: Icons.lan_outlined,
               error: _endpointError,
               compact: compact,
+              suffix: IconButton(
+                icon: Icon(
+                  Icons.content_paste_rounded,
+                  size: compact ? 18 : 20,
+                ),
+                tooltip: 'Paste address',
+                onPressed: _pasteToEndpoint,
+              ),
             ),
           );
           final pinField = TextField(
@@ -282,6 +359,11 @@ final class _ConnectPageState extends State<ConnectPage> {
             textInputAction: TextInputAction.done,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             maxLength: 6,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              letterSpacing: 2.0,
+              fontWeight: FontWeight.w600,
+            ),
             onSubmitted: (_) {
               if (!_connecting) _connect();
             },
@@ -300,16 +382,29 @@ final class _ConnectPageState extends State<ConnectPage> {
               icon: Icons.dialpad_rounded,
               error: _pinError,
               compact: compact,
-              suffix: IconButton(
-                key: const ValueKey('toggle-pin-visibility'),
-                icon: Icon(
-                  _showPin
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
-                  size: compact ? 18 : 22,
-                ),
-                tooltip: _showPin ? 'Hide PIN' : 'Show PIN',
-                onPressed: () => setState(() => _showPin = !_showPin),
+              suffix: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.content_paste_rounded,
+                      size: compact ? 18 : 20,
+                    ),
+                    tooltip: 'Paste PIN',
+                    onPressed: _pasteToPin,
+                  ),
+                  IconButton(
+                    key: const ValueKey('toggle-pin-visibility'),
+                    icon: Icon(
+                      _showPin
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: compact ? 18 : 20,
+                    ),
+                    tooltip: _showPin ? 'Hide PIN' : 'Show PIN',
+                    onPressed: () => setState(() => _showPin = !_showPin),
+                  ),
+                ],
               ),
             ).copyWith(counterText: ''),
           );
@@ -333,81 +428,10 @@ final class _ConnectPageState extends State<ConnectPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: compact ? 40 : 48,
-                            height: compact ? 40 : 48,
-                            decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(Icons.sports_esports_rounded),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'PULGAPP',
-                                  style: compact
-                                      ? Theme.of(context).textTheme.titleLarge
-                                      : Theme.of(
-                                          context,
-                                        ).textTheme.headlineMedium,
-                                ),
-                                Text(
-                                  'Pair over your local Wi-Fi',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: compact ? 10 : 18),
-                      OutlinedButton.icon(
-                        onPressed: _connecting ? null : _manageProfiles,
-                        icon: const Icon(Icons.tune),
-                        label: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'CONTROLS: ${_profiles.selected.name.toUpperCase()}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    _profiles.selected.buttons.visibleSummary,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.labelSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right_rounded),
-                          ],
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 9,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: compact ? 10 : 18),
+                      _buildHeader(context, compact),
+                      SizedBox(height: compact ? 8 : 16),
+                      _buildProfileCard(context, compact),
+                      SizedBox(height: compact ? 8 : 16),
                       if (landscapeForm)
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,31 +483,7 @@ final class _ConnectPageState extends State<ConnectPage> {
                         ),
                       ],
                       SizedBox(height: compact ? 10 : 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: _discovering ? null : _discover,
-                              icon: const Icon(Icons.radar_rounded),
-                              label: Text(
-                                _discovering ? 'SEARCHING…' : 'FIND SERVER',
-                              ),
-                              style: _actionStyle,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton.icon(
-                              onPressed: _connecting ? null : _connect,
-                              icon: const Icon(Icons.link_rounded),
-                              label: Text(
-                                _connecting ? 'CONNECTING…' : 'CONNECT',
-                              ),
-                              style: _actionStyle,
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildActionButtons(context, landscapeForm, compact),
                     ],
                   ),
                 ),
@@ -495,6 +495,279 @@ final class _ConnectPageState extends State<ConnectPage> {
     ),
   );
 
+  Widget _buildHeader(BuildContext context, bool compact) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Row(
+      children: [
+        Container(
+          width: compact ? 38 : 46,
+          height: compact ? 38 : 46,
+          decoration: BoxDecoration(
+            color: colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: colorScheme.primary.withAlpha(40),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.sports_esports_rounded,
+            color: colorScheme.onPrimaryContainer,
+            size: compact ? 22 : 26,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    'PULGAPP',
+                    style: (compact
+                            ? theme.textTheme.titleMedium
+                            : theme.textTheme.headlineSmall)
+                        ?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withAlpha(30),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: colorScheme.primary.withAlpha(80),
+                      ),
+                    ),
+                    child: Text(
+                      'Wi-Fi LAN',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                'Pair over your local network',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          icon: const Icon(Icons.gamepad_outlined),
+          tooltip: 'Offline Test Pad',
+          onPressed: _connecting ? null : _openTestPad,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileCard(BuildContext context, bool compact) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final profile = _profiles.selected;
+    final deadzonePct = (profile.sticks.deadZone * 100).round();
+    final sens = profile.sticks.sensitivity.toStringAsFixed(1);
+    final triggerMode = profile.sticks.digitalTriggers ? 'Digital' : 'Analog';
+
+    return Material(
+      color: colorScheme.surfaceContainerHighest.withAlpha(70),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _connecting ? null : _manageProfiles,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: compact ? 8 : 12,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withAlpha(70),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.tune_rounded,
+                  color: colorScheme.primary,
+                  size: compact ? 18 : 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'CONTROLS: ${profile.name.toUpperCase()}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                            color: colorScheme.primary,
+                          ),
+                        ),
+                        _buildMiniBadge(
+                          profile.controllerType.shortLabel,
+                          colorScheme,
+                        ),
+                        _buildMiniBadge('DZ: $deadzonePct%', colorScheme),
+                        _buildMiniBadge('${sens}x', colorScheme),
+                        _buildMiniBadge(triggerMode, colorScheme),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      profile.visibleSummary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorScheme.onSurfaceVariant,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(String text, ColorScheme colorScheme) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    decoration: BoxDecoration(
+      color: colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(
+        color: colorScheme.outlineVariant.withAlpha(50),
+      ),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 9,
+        color: colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+
+  Widget _buildActionButtons(
+    BuildContext context,
+    bool landscapeForm,
+    bool compact,
+  ) {
+    final scanQrBtn = OutlinedButton.icon(
+      onPressed: (_connecting || _discovering) ? null : _scanQr,
+      icon: const Icon(Icons.qr_code_scanner_rounded),
+      label: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text('SCAN QR'),
+      ),
+      style: _actionStyle(compact),
+    );
+
+    final findServerBtn = OutlinedButton.icon(
+      onPressed: _discovering ? null : _discover,
+      icon: const Icon(Icons.radar_rounded),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(_discovering ? 'SEARCHING…' : 'FIND SERVER'),
+      ),
+      style: _actionStyle(compact),
+    );
+
+    final connectBtn = FilledButton.icon(
+      onPressed: _connecting ? null : _connect,
+      icon: const Icon(Icons.link_rounded),
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(_connecting ? 'CONNECTING…' : 'CONNECT'),
+      ),
+      style: _actionStyle(compact).copyWith(
+        backgroundColor: WidgetStatePropertyAll(
+          Theme.of(context).colorScheme.primary,
+        ),
+        foregroundColor: WidgetStatePropertyAll(
+          Theme.of(context).colorScheme.onPrimary,
+        ),
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1),
+        ),
+      ),
+    );
+
+    if (landscapeForm) {
+      return Row(
+        children: [
+          Expanded(child: scanQrBtn),
+          const SizedBox(width: 10),
+          Expanded(child: findServerBtn),
+          const SizedBox(width: 10),
+          Expanded(child: connectBtn),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(child: scanQrBtn),
+            const SizedBox(width: 10),
+            Expanded(child: findServerBtn),
+          ],
+        ),
+        const SizedBox(height: 10),
+        connectBtn,
+      ],
+    );
+  }
+
   InputDecoration _fieldDecoration(
     BuildContext context, {
     required String label,
@@ -503,19 +776,45 @@ final class _ConnectPageState extends State<ConnectPage> {
     required String? error,
     required bool compact,
     Widget? suffix,
-  }) => InputDecoration(
-    labelText: label,
-    hintText: hint,
-    errorText: error,
-    prefixIcon: Icon(icon),
-    suffixIcon: suffix,
-    filled: true,
-    isDense: compact,
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-  );
+  }) {
+    final theme = Theme.of(context);
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      errorText: error,
+      prefixIcon: Icon(icon, color: theme.colorScheme.primary.withAlpha(200)),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+      isDense: compact,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: compact ? 10 : 16,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: theme.colorScheme.outlineVariant.withAlpha(80),
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: theme.colorScheme.outlineVariant.withAlpha(80),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: theme.colorScheme.primary,
+          width: 2,
+        ),
+      ),
+    );
+  }
 
-  ButtonStyle get _actionStyle => ButtonStyle(
-    minimumSize: const WidgetStatePropertyAll(Size.fromHeight(52)),
+  ButtonStyle _actionStyle(bool compact) => ButtonStyle(
+    minimumSize: WidgetStatePropertyAll(Size.fromHeight(compact ? 44 : 50)),
     shape: WidgetStatePropertyAll(
       RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
@@ -581,13 +880,14 @@ final class _ControllerPageState extends State<ControllerPage>
     body: SafeArea(
       child: TouchController(
         model: _input,
+        controllerType: widget.profile.controllerType,
         stickSettings: widget.profile.sticks,
         buttonMapping: widget.profile.buttons,
         layoutSettings: widget.profile.layout,
         enabled: _connectionState == PulgappConnectionState.connected,
         status: _connectionState == PulgappConnectionState.inputUnavailable
             ? 'UDP unavailable: check Wi-Fi and firewall'
-            : 'Slot ${widget.connection.welcome?.slot ?? '-'} | ${_connectionState.name}',
+            : 'Slot ${widget.connection.welcome?.slot ?? '-'} (${widget.profile.controllerType.shortLabel}) | ${_connectionState.name}',
       ),
     ),
   );
