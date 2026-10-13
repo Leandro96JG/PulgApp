@@ -35,8 +35,9 @@ Living memory, architectural decisions, and current state of the Pulgapp project
 - [x] **P3**: Soporte de mandos DS4 en slots 5-8 (Gate G3: simulador 8 clientes superado; prueba física de 2 horas aplazada por excepción autorizada).
 - [x] **P4**: Descubrimiento mDNS y reconexión resiliente (Gate G4: PASS).
 - [x] **P5-01 a P5-05**: Rediseño táctil ergonómico, perfiles locales, remapeo de botones, dead zones, vibración táctil nativa, rumble sobre WebSocket, emparejamiento QR, bandeja del sistema, single-instance y rediseño visual moderno.
+- [x] **Release v1.0.0**: Tag y rama empujados a GitHub (`v1.0.0`), README moderno publicado y pipeline de CI/CD para compilación de ejecutables activo.
 - [ ] **P5-06 (Siguiente Tarea)**: Verificación de áreas seguras y multitouch en teléfonos pequeños y tablets (Gate G5).
-- [ ] **Fase P6**: Empaquetado, instalador WiX, reglas de firewall y hardening de release (Gate G6).
+- [ ] **Fase P6**: Empaquetado formal con instalador WiX, reglas de firewall y hardening de release (Gate G6).
 
 ---
 
