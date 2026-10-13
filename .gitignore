@@ -5,6 +5,8 @@
 .flutter-plugins-dependencies
 .packages
 build/
+dist/
+release/
 
 # .NET build output
 **/bin/

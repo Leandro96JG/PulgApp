@@ -62,3 +62,7 @@ Living memory, architectural decisions, and current state of the Pulgapp project
 - Análisis estático: `flutter analyze --no-pub`
 - Tests unitarios y de widgets: `flutter test --no-pub`
 - Compilación debug APK: `flutter build apk --debug --no-pub`
+
+### Distribución y Empaquetado de Releases
+- Empaquetado Completo Local: `.\tools\package-release.ps1` (genera `Pulgapp-Server-win-x64.zip` y `Pulgapp-Android.apk` en `release/`)
+- GitHub Actions CI/CD: `.github/workflows/release.yml` compila ambos artefactos y publica en GitHub Releases al crear tags `v*.*.*` o manualmente vía `workflow_dispatch`.
